@@ -87,7 +87,18 @@ class Generator:
 
     def _scaffold(self):
         if self.target_dir.exists():
-            shutil.rmtree(self.target_dir)
+            # Clear the *contents* rather than the directory itself. On Windows a
+            # top-level dir stays locked while a shell/Explorer sits inside it, so
+            # rmdir'ing it fails — but wiping its children (and recreating them)
+            # succeeds and keeps regeneration idempotent.
+            for child in self.target_dir.iterdir():
+                if child.is_dir():
+                    shutil.rmtree(child, ignore_errors=True)
+                else:
+                    try:
+                        child.unlink()
+                    except OSError:
+                        pass
         for sub in ["app", "app/api", "app/data", "frontend", "frontend/src",
                     "infra", "observability/prometheus", "observability/grafana/dashboards",
                     "observability/loki", ".github/workflows", "rbac", "scripts"]:

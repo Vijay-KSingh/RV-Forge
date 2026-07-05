@@ -5,15 +5,24 @@ re-run the generator with an updated manifest instead.
 """
 from __future__ import annotations
 
+import csv
+import io
 import json
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 DATA_DIR = Path(__file__).parent / "data"
+UPLOAD_DIR = DATA_DIR / "uploads"
+
+# Upload limits / accepted formats for the "bring your own data" feature.
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+PREVIEW_ROWS = 25
+ALLOWED_UPLOAD_EXT = {".xlsx", ".csv"}
+_last_upload: dict = {}  # in-memory cache of the most recently parsed upload
 
 app = FastAPI(
     title="{{APP_NAME}}",
@@ -117,6 +126,103 @@ def digest():
         ],
         "anomalies": [],
     }
+
+
+# ── Bring your own data: Excel / CSV upload ──────────────────────────
+
+def _safe_name(name: str) -> str:
+    base = os.path.basename(name or "upload")
+    cleaned = "".join(c for c in base if c.isalnum() or c in (".", "_", "-"))
+    return cleaned or "upload"
+
+
+def _parse_csv(raw: bytes):
+    text = raw.decode("utf-8-sig", errors="replace")
+    rows = list(csv.reader(io.StringIO(text)))
+    if not rows:
+        return [], []
+    return [str(h) for h in rows[0]], rows[1:]
+
+
+def _parse_xlsx(raw: bytes):
+    from openpyxl import load_workbook
+    wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+    try:
+        ws = wb.active
+        rows = [["" if c is None else c for c in row]
+                for row in ws.iter_rows(values_only=True)]
+    finally:
+        wb.close()
+    if not rows:
+        return [], []
+    return [str(h) for h in rows[0]], rows[1:]
+
+
+def _numeric_summary(header, data_rows):
+    """Per-column min/max/avg/sum so the UI can show instant analytics."""
+    summaries = []
+    for ci, col in enumerate(header):
+        nums = []
+        for r in data_rows:
+            if ci < len(r):
+                try:
+                    nums.append(float(r[ci]))
+                except (TypeError, ValueError):
+                    pass
+        # treat a column as numeric only if most of its cells parse as numbers
+        if nums and len(nums) >= max(1, len(data_rows) // 2):
+            summaries.append({
+                "column": col, "count": len(nums),
+                "min": min(nums), "max": max(nums),
+                "sum": sum(nums), "avg": sum(nums) / len(nums),
+            })
+    return summaries
+
+
+@app.post("/api/upload")
+async def upload_data(file: UploadFile = File(...)):
+    """Accept an Excel (.xlsx) or CSV file, parse it, and return a preview
+    plus a quick numeric summary. The file is stored under data/uploads/."""
+    name = _safe_name(file.filename)
+    ext = os.path.splitext(name)[1].lower()
+    if ext not in ALLOWED_UPLOAD_EXT:
+        raise HTTPException(400, f"Unsupported file type '{ext or '?'}'. Upload .xlsx or .csv")
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "Empty file")
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "File too large (max 10 MB)")
+
+    try:
+        header, data_rows = _parse_xlsx(raw) if ext == ".xlsx" else _parse_csv(raw)
+    except Exception as e:  # noqa: BLE001 — surface a clean client error
+        raise HTTPException(422, f"Could not parse file: {e}")
+
+    if not header:
+        raise HTTPException(422, "No columns found — is the first row a header?")
+
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    (UPLOAD_DIR / name).write_bytes(raw)
+
+    preview = [[("" if v is None else str(v)) for v in r] for r in data_rows[:PREVIEW_ROWS]]
+    result = {
+        "filename": name,
+        "columns": header,
+        "column_count": len(header),
+        "row_count": len(data_rows),
+        "preview_rows": preview,
+        "numeric_summary": _numeric_summary(header, data_rows),
+    }
+    _last_upload.clear()
+    _last_upload.update(result)
+    return result
+
+
+@app.get("/api/uploads/latest")
+def latest_upload():
+    """The most recently uploaded dataset (metadata + preview), if any."""
+    return _last_upload or {"filename": None, "row_count": 0, "columns": []}
 
 
 if __name__ == "__main__":

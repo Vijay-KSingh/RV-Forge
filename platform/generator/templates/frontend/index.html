@@ -39,6 +39,20 @@
       </section>
 
       <section class="card">
+        <h2>Upload your data</h2>
+        <p class="muted" style="margin: 0 0 14px">Bring your own numbers — upload an Excel (.xlsx) or CSV file to preview it and get an instant summary.</p>
+        <div class="upload">
+          <label class="upload-drop" id="uploadDrop">
+            <input id="fileInput" type="file" accept=".xlsx,.csv" hidden />
+            <span id="fileLabel">Choose an .xlsx or .csv file…</span>
+          </label>
+          <button id="uploadBtn" style="background: {{PRIMARY_COLOR}}" disabled>Upload</button>
+        </div>
+        <div id="uploadStatus" class="upload-status"></div>
+        <div id="uploadResult"></div>
+      </section>
+
+      <section class="card">
         <h2>Configured KPIs</h2>
         <div id="kpis" class="kpi-grid"></div>
       </section>
