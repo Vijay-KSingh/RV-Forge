@@ -1,0 +1,38 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Virtualenv / local pip cache (created by run.sh) ──────────────────────────
+.venv/
+.pipcache/
+.pmptmp/
+
+# ── Secrets & local state (NEVER commit) ──────────────────────────────────────
+.env
+.forge_secrets/
+.forge_manifests/
+platform/backend/.forge_secrets/
+platform/backend/.forge_manifests/
+
+# ── Generated output & data artifacts ─────────────────────────────────────────
+generated_apps/*
+!generated_apps/.gitkeep
+data/processed/*
+data/features/*
+data/models/*
+data/*.duckdb
+*.joblib
+
+# ── OS / editor cruft ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ── ML training artifacts / logs ──────────────────────────────────────────────
+catboost_info/
+*.log

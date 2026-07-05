@@ -1,0 +1,187 @@
+# Forge Platform — full stack docker-compose
+#
+# Brings up:
+#   - forge-api          (FastAPI on :8800)  — wizard + generator + ML endpoints
+#   - postgres           (db on :5432)        — Airflow metadata + Forge data
+#   - mlflow             (UI on :5500)        — experiment tracking + model registry
+#   - airflow-init                            — one-shot DB init
+#   - airflow-webserver  (UI on :8080)        — DAG management
+#   - airflow-scheduler                       — DAG runs
+#   - airflow-worker                          — celery-style worker (LocalExecutor here)
+#
+# Boot:    docker compose -f docker/compose.yml up --build
+# Logs:    docker compose -f docker/compose.yml logs -f forge-api
+# Stop:    docker compose -f docker/compose.yml down
+# Reset:   docker compose -f docker/compose.yml down -v   # nukes volumes
+#
+# Defaults credentials (DEMO ONLY — change for real deployments):
+#   Airflow admin: forge / forge_demo
+#   Postgres:      forge / forge_demo
+
+x-airflow-common: &airflow-common
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile.airflow
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://forge:forge_demo@postgres:5432/airflow
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+    MLFLOW_TRACKING_URI: http://mlflow:5000
+    PYTHONPATH: /opt/airflow/forge_backend
+    FORGE_INGESTION_CONFIG: /opt/airflow/config/ingestion_specs.json
+    FORGE_TRAINING_CONFIG: /opt/airflow/config/training_specs.json
+    FORGE_DRIFT_CONFIG: /opt/airflow/config/drift_specs.json
+  volumes:
+    - ../platform/airflow/dags:/opt/airflow/dags
+    - ../platform/airflow/config:/opt/airflow/config
+    - ../platform/airflow/plugins:/opt/airflow/plugins
+    - ../platform/backend:/opt/airflow/forge_backend
+    - ../data:/data
+    - airflow_logs:/opt/airflow/logs
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on: &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
+
+services:
+  # ─── Postgres: Airflow metadata + Forge tables ──────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: forge-postgres
+    environment:
+      POSTGRES_USER: forge
+      POSTGRES_PASSWORD: forge_demo
+      POSTGRES_DB: airflow
+      POSTGRES_MULTIPLE_DATABASES: forge,mlflow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "forge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── MLflow tracking server + model registry ────────────────────────
+  mlflow:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.mlflow
+    container_name: forge-mlflow
+    environment:
+      MLFLOW_BACKEND_STORE_URI: postgresql+psycopg2://forge:forge_demo@postgres:5432/mlflow
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: /mlflow/artifacts
+    ports:
+      - "5500:5000"
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      mlflow server
+        --host 0.0.0.0
+        --port 5000
+        --backend-store-uri postgresql+psycopg2://forge:forge_demo@postgres:5432/mlflow
+        --default-artifact-root /mlflow/artifacts
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ─── Forge platform API (wizard + generator + ML endpoints) ─────────
+  forge-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    container_name: forge-api
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      PYTHONPATH: /app/backend
+      FORGE_DUCKDB_PATH: /data/forge.duckdb
+    ports:
+      - "8800:8800"
+    volumes:
+      - ../platform:/app/platform
+      - ../platform/backend:/app/backend
+      - ../data:/data
+      - ../generated_apps:/generated_apps
+      - forge_secrets:/app/.forge_secrets
+      - forge_manifests:/app/.forge_manifests
+    depends_on:
+      mlflow:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8800/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ─── Airflow ────────────────────────────────────────────────────────
+  airflow-init:
+    <<: *airflow-common
+    container_name: forge-airflow-init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username forge \
+          --password forge_demo \
+          --firstname Forge \
+          --lastname Admin \
+          --role Admin \
+          --email admin@forge.local || true
+        echo "Airflow initialized."
+    depends_on:
+      <<: *airflow-common-depends-on
+
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: forge-airflow-webserver
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: forge-airflow-scheduler
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "airflow", "jobs", "check", "--job-type", "SchedulerJob", "--hostname", "$${HOSTNAME}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
+  mlflow_artifacts:
+  airflow_logs:
+  forge_secrets:
+  forge_manifests:

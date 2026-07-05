@@ -1,0 +1,35 @@
+# Forge platform — native (non-Docker) runtime dependencies.
+# Pinned to versions verified working on CPython 3.14 (Windows + Linux).
+#
+# Install:  python -m venv .venv && .venv/bin/pip install -r requirements.txt
+# (Windows: .venv\Scripts\pip install -r requirements.txt)
+#
+# The Docker image uses docker/requirements-api.txt (pinned for 3.11). This file
+# is the source of truth for running the API directly on a modern interpreter.
+
+# ── Core API (the wizard + generator; minimum to serve the platform) ──────────
+fastapi==0.136.3
+uvicorn[standard]==0.48.0
+pydantic==2.13.4
+cryptography==48.0.0
+PyYAML==6.0.3
+python-multipart==0.0.30
+httpx==0.28.1                 # used by the in-process test client
+
+# ── ML stack (/api/ml/* endpoints; lazy-imported, degrade gracefully) ─────────
+numpy==2.4.6
+pandas==2.3.3
+scipy==1.17.1
+scikit-learn==1.9.0
+statsmodels==0.14.6
+joblib==1.5.3
+duckdb==1.5.3
+
+# Optional forecasting models — auto-detected at runtime; omit to slim the
+# install (arima/sarima/holt_winters still work via statsmodels above).
+xgboost==3.2.0
+catboost==1.2.10
+prophet==1.3.0
+
+# Experiment tracking + model registry (opt-in via MLFLOW_TRACKING_URI).
+mlflow==3.13.0

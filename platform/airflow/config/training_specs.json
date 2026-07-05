@@ -1,0 +1,16 @@
+[
+  {
+    "customer_id": "demo",
+    "kpi_id": "revenue",
+    "source_kind": "duckdb",
+    "source_db_path": "/data/forge.duckdb",
+    "history_query": "SELECT timestamp, value FROM revenue_history ORDER BY timestamp",
+    "horizon": 30,
+    "n_folds": 3,
+    "test_size": 21,
+    "candidate_models": ["arima", "sarima", "holt_winters", "xgboost", "prophet"],
+    "train_anomaly": true,
+    "train_forecast": true,
+    "artifact_dir": "/data/models"
+  }
+]

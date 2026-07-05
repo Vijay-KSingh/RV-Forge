@@ -1,0 +1,13 @@
+[
+  {
+    "customer_id": "demo",
+    "kpi_id": "revenue",
+    "source_kind": "duckdb",
+    "source_db_path": "/data/forge.duckdb",
+    "reference_query": "SELECT timestamp, value FROM revenue_history WHERE timestamp BETWEEN '2024-06-01' AND '2024-12-31' ORDER BY timestamp",
+    "feature_store_query": "SELECT timestamp, value FROM revenue_history WHERE timestamp >= '2025-10-01' ORDER BY timestamp",
+    "psi_minor": 0.1,
+    "psi_major": 0.2,
+    "min_severity_to_retrain": "major"
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "id": "demo_revenue_ingest",
+    "kind": "csv",
+    "path": "demo_revenue.csv",
+    "source_kwargs": {
+      "base_dir": "/data/raw",
+      "read_kwargs": {"parse_dates": ["timestamp"]}
+    },
+    "target_kind": "duckdb",
+    "target_kwargs": {"db_path": "/data/forge.duckdb"},
+    "target_table": "revenue_history",
+    "primary_key": ["timestamp"],
+    "schedule": "@hourly"
+  }
+]

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{APP_NAME}}</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="dot" style="background: {{PRIMARY_COLOR}}"></span>
+        <strong>{{APP_NAME}}</strong>
+        <span class="muted"> · for {{COMPANY}}</span>
+      </div>
+      <div class="user">
+        <select id="role">
+          <option value="admin">admin</option>
+          <option value="viewer">viewer</option>
+        </select>
+      </div>
+    </header>
+
+    <main>
+      <section class="card hero">
+        <h1>Welcome to {{APP_NAME}}</h1>
+        <p class="muted">A generated analytics workspace for {{COMPANY}}, configured for the {{INDUSTRY}} industry.</p>
+        <div id="digest"></div>
+      </section>
+
+      <section class="card">
+        <h2>Ask anything</h2>
+        <div class="ask">
+          <input id="q" placeholder="Try: What's our revenue trend this quarter?" />
+          <button id="askBtn" style="background: {{PRIMARY_COLOR}}">Ask</button>
+        </div>
+        <div id="answer"></div>
+      </section>
+
+      <section class="card">
+        <h2>Configured KPIs</h2>
+        <div id="kpis" class="kpi-grid"></div>
+      </section>
+
+      <section class="card">
+        <h2>Data sources</h2>
+        <div id="ds" class="ds-list"></div>
+      </section>
+    </main>
+  </div>
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+name: {{APP_SLUG}} CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend deps
+        run: pip install -r app/requirements.txt
+
+      - name: Lint (ruff)
+        run: |
+          pip install ruff
+          ruff check app/ || true
+
+      - name: Type check (mypy)
+        run: |
+          pip install mypy
+          mypy app/main.py --ignore-missing-imports || true
+
+      - name: Security scan (bandit)
+        run: |
+          pip install bandit
+          bandit -r app/ -ll || true
+
+      - name: Secrets scan
+        uses: trufflesecurity/trufflehog@v3
+        with:
+          path: ./
+          base: ${{ github.event.before }}
+          head: HEAD
+        continue-on-error: true
+
+      - name: Manifest validation
+        run: |
+          pip install pyyaml pydantic
+          python -c "import yaml; m = yaml.safe_load(open('manifest.yaml')); assert m['schema_version'].startswith('1.')"
+
+  build:
+    needs: quality-gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -f Dockerfile.backend -t ${{ github.repository }}/{{APP_SLUG}}-backend:${{ github.sha }} .
+
+      - name: Build frontend image
+        run: docker build -f Dockerfile.frontend -t ${{ github.repository }}/{{APP_SLUG}}-frontend:${{ github.sha }} .
+
+      # Real deployment: push to registry, then `terraform apply`.
+      # Here we stop at build to keep the demo safe.
+
+  deploy-plan:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform plan
+        working-directory: ./infra/terraform
+        run: |
+          terraform init
+          terraform plan -out=tfplan
+        continue-on-error: true

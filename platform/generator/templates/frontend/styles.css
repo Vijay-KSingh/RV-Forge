@@ -1,0 +1,39 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #f6f7f9; color: #1a1a1a; }
+.topbar { display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 28px; background: white; border-bottom: 1px solid #e5e7eb;
+  position: sticky; top: 0; z-index: 10; }
+.brand { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.muted { color: #6b7280; }
+main { max-width: 1100px; margin: 28px auto; padding: 0 20px;
+  display: flex; flex-direction: column; gap: 20px; }
+.card { background: white; border: 1px solid #e5e7eb; border-radius: 10px;
+  padding: 22px 26px; }
+.card h1 { margin: 0 0 8px; font-size: 22px; }
+.card h2 { margin: 0 0 16px; font-size: 16px; color: #374151; }
+.hero { background: linear-gradient(135deg, {{PRIMARY_COLOR}}11, {{ACCENT_COLOR}}11); }
+.ask { display: flex; gap: 8px; }
+.ask input { flex: 1; padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 8px;
+  font-size: 14px; }
+.ask button { padding: 10px 18px; color: white; border: none; border-radius: 8px;
+  cursor: pointer; font-weight: 500; }
+#answer { margin-top: 14px; padding: 14px; background: #f9fafb; border-radius: 8px;
+  display: none; }
+#answer.show { display: block; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px; }
+.kpi { padding: 14px; background: #f9fafb; border-radius: 8px; border-left: 3px solid {{PRIMARY_COLOR}}; }
+.kpi-name { font-weight: 500; font-size: 14px; }
+.kpi-domain { font-size: 11px; color: #6b7280; text-transform: uppercase;
+  letter-spacing: 0.5px; margin-top: 2px; }
+.kpi-formula { font-family: ui-monospace, "SF Mono", monospace; font-size: 11px;
+  color: #4b5563; margin-top: 8px; }
+.ds-list { display: flex; flex-direction: column; gap: 8px; }
+.ds { display: flex; justify-content: space-between; padding: 10px 14px;
+  background: #f9fafb; border-radius: 8px; font-size: 13px; }
+.ds-kind { font-family: ui-monospace, monospace; color: {{ACCENT_COLOR}}; }
+.digest-section { margin-top: 12px; }
+.digest-section h3 { font-size: 13px; margin: 12px 0 6px; color: #374151; }
+.digest-section ul { margin: 0; padding-left: 20px; font-size: 13px; }

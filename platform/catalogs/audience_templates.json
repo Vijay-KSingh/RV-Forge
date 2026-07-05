@@ -1,0 +1,90 @@
+{
+  "version": "1.0.0",
+  "audiences": [
+    {
+      "id": "aud_cfo",
+      "name": "CFO / Finance Leader",
+      "description": "Owns financial planning, profitability, and capital efficiency",
+      "default_kpi_ids": ["fin_revenue_total", "fin_revenue_growth_yoy", "fin_gross_margin", "fin_burn_rate", "fin_runway_months", "fin_budget_variance"],
+      "suggested_questions": [
+        "What's our Q4 savings forecast?",
+        "Which departments are over 10% on budget variance?",
+        "How does this quarter's gross margin compare to last year?",
+        "What's the projected runway at current burn rate?",
+        "Show me revenue by product line, with anomalies flagged."
+      ]
+    },
+    {
+      "id": "aud_ceo",
+      "name": "CEO / Founder",
+      "description": "Cross-functional view of company health",
+      "default_kpi_ids": ["fin_revenue_total", "sls_arr", "sls_arr_growth", "cust_churn_rate", "cust_nps", "hr_attrition_rate"],
+      "suggested_questions": [
+        "Give me a one-page board update for this month.",
+        "What changed materially this week vs last week?",
+        "Which 3 things should I be most worried about right now?",
+        "Compare us to plan across all departments."
+      ]
+    },
+    {
+      "id": "aud_revops",
+      "name": "RevOps Lead",
+      "description": "Owns sales process, pipeline health, and forecast accuracy",
+      "default_kpi_ids": ["sls_pipeline_value", "sls_win_rate", "sls_sales_cycle_days", "sls_quota_attainment", "sls_funnel_conversion"],
+      "suggested_questions": [
+        "Where is the biggest pipeline drop-off this quarter?",
+        "Which reps are at risk of missing quota?",
+        "Has our sales cycle gotten longer or shorter?",
+        "What's the forecast vs commit gap?"
+      ]
+    },
+    {
+      "id": "aud_hr",
+      "name": "Head of People",
+      "description": "Talent acquisition, retention, and engagement",
+      "default_kpi_ids": ["hr_headcount", "hr_attrition_rate", "hr_voluntary_attrition", "hr_time_to_hire", "hr_engagement_score"],
+      "suggested_questions": [
+        "Where is voluntary attrition spiking?",
+        "What's our average time-to-hire by function?",
+        "Which teams scored lowest on the latest engagement survey?",
+        "Cost-per-hire trend over the last 6 months."
+      ]
+    },
+    {
+      "id": "aud_cs",
+      "name": "Customer Success Leader",
+      "description": "Customer health, retention, expansion",
+      "default_kpi_ids": ["cust_churn_rate", "cust_nps", "cust_active_users", "cust_first_response_time", "sls_net_revenue_retention"],
+      "suggested_questions": [
+        "Which accounts are at highest churn risk?",
+        "What's our NRR trend?",
+        "Where are response times slipping?",
+        "Top 5 expansion opportunities this quarter."
+      ]
+    },
+    {
+      "id": "aud_eng",
+      "name": "Engineering Leader",
+      "description": "Delivery velocity, system reliability, quality",
+      "default_kpi_ids": ["prod_release_frequency", "prod_lead_time_changes", "prod_change_failure_rate", "ops_uptime", "ops_mttr", "prod_bug_count"],
+      "suggested_questions": [
+        "What's our DORA performance this quarter?",
+        "Where are the deploys failing most?",
+        "MTTR trend by service.",
+        "Which services have the worst incident rate?"
+      ]
+    },
+    {
+      "id": "aud_risk",
+      "name": "Risk / Compliance Officer",
+      "description": "Fraud, audit, regulatory posture",
+      "default_kpi_ids": ["risk_fraud_rate", "risk_false_positive_rate", "risk_aml_alerts", "risk_audit_findings", "risk_security_incidents"],
+      "suggested_questions": [
+        "Which transactions look anomalous this week?",
+        "Open audit findings older than 30 days.",
+        "False-positive rate trend on fraud alerts.",
+        "Any new high-severity incidents in last 24h?"
+      ]
+    }
+  ]
+}

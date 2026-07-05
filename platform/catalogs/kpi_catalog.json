@@ -1,0 +1,105 @@
+{
+  "version": "1.0.0",
+  "domains": {
+    "finance": {
+      "label": "Finance",
+      "icon": "💰",
+      "kpis": [
+        { "id": "fin_revenue_total", "name": "Total Revenue", "formula": "SUM(revenue.amount)", "unit": "currency", "chart_type": "line", "higher_is_better": true, "description": "Total realized revenue across all channels and products" },
+        { "id": "fin_revenue_growth_yoy", "name": "Revenue Growth YoY", "formula": "(SUM(revenue.amount this_year) - SUM(revenue.amount last_year)) / SUM(revenue.amount last_year)", "unit": "percent", "chart_type": "kpi", "higher_is_better": true, "alert_threshold_pct": 10.0, "description": "Year-over-year revenue change" },
+        { "id": "fin_gross_margin", "name": "Gross Margin", "formula": "(SUM(revenue) - SUM(cogs)) / SUM(revenue)", "unit": "percent", "chart_type": "kpi", "higher_is_better": true, "description": "Revenue minus cost of goods, as a percent of revenue" },
+        { "id": "fin_operating_margin", "name": "Operating Margin", "formula": "SUM(operating_income) / SUM(revenue)", "unit": "percent", "chart_type": "line", "higher_is_better": true, "description": "Profitability after operating expenses" },
+        { "id": "fin_ebitda", "name": "EBITDA", "formula": "SUM(operating_income) + SUM(depreciation) + SUM(amortization)", "unit": "currency", "chart_type": "bar", "higher_is_better": true, "description": "Earnings before interest, taxes, depreciation and amortization" },
+        { "id": "fin_burn_rate", "name": "Monthly Burn Rate", "formula": "AVG(cash_outflow per month)", "unit": "currency", "chart_type": "line", "higher_is_better": false, "description": "Average monthly cash outflow" },
+        { "id": "fin_runway_months", "name": "Runway (Months)", "formula": "cash_balance / monthly_burn", "unit": "number", "chart_type": "kpi", "higher_is_better": true, "description": "Months of operation remaining at current burn" },
+        { "id": "fin_cac", "name": "Customer Acquisition Cost", "formula": "SUM(sales_marketing_spend) / COUNT(new_customers)", "unit": "currency", "chart_type": "kpi", "higher_is_better": false, "description": "Average cost to acquire one new customer" },
+        { "id": "fin_ltv", "name": "Customer Lifetime Value", "formula": "AVG(customer_revenue * customer_lifespan_months)", "unit": "currency", "chart_type": "kpi", "higher_is_better": true, "description": "Predicted total revenue from a single customer" },
+        { "id": "fin_ltv_cac", "name": "LTV / CAC Ratio", "formula": "ltv / cac", "unit": "ratio", "chart_type": "kpi", "higher_is_better": true, "target_value": 3.0, "description": "Healthy SaaS ratio is 3+" },
+        { "id": "fin_dso", "name": "Days Sales Outstanding", "formula": "AVG(receivables_days)", "unit": "days", "chart_type": "line", "higher_is_better": false, "description": "Average days to collect receivables" },
+        { "id": "fin_budget_variance", "name": "Budget Variance", "formula": "(SUM(actual) - SUM(plan)) / SUM(plan)", "unit": "percent", "chart_type": "bar", "higher_is_better": false, "alert_threshold_pct": 10.0, "description": "Actual vs planned spend; flag departments over 10%" }
+      ]
+    },
+    "sales": {
+      "label": "Sales",
+      "icon": "📈",
+      "kpis": [
+        { "id": "sls_pipeline_value", "name": "Pipeline Value", "formula": "SUM(opportunity.amount WHERE stage NOT IN closed)", "unit": "currency", "chart_type": "bar", "higher_is_better": true, "description": "Total value of open opportunities" },
+        { "id": "sls_win_rate", "name": "Win Rate", "formula": "COUNT(won) / COUNT(closed)", "unit": "percent", "chart_type": "kpi", "higher_is_better": true, "description": "Percent of closed opportunities won" },
+        { "id": "sls_avg_deal_size", "name": "Average Deal Size", "formula": "AVG(opportunity.amount WHERE won)", "unit": "currency", "chart_type": "line", "higher_is_better": true, "description": "Average closed-won deal value" },
+        { "id": "sls_sales_cycle_days", "name": "Sales Cycle Length", "formula": "AVG(close_date - created_date)", "unit": "days", "chart_type": "line", "higher_is_better": false, "description": "Average days from opportunity creation to close" },
+        { "id": "sls_quota_attainment", "name": "Quota Attainment", "formula": "SUM(actual_revenue) / SUM(quota)", "unit": "percent", "chart_type": "bar", "higher_is_better": true, "target_value": 1.0, "description": "Sales rep performance vs quota" },
+        { "id": "sls_funnel_conversion", "name": "Funnel Conversion Rate", "formula": "COUNT(stage_n) / COUNT(stage_n_minus_1)", "unit": "percent", "chart_type": "funnel", "higher_is_better": true, "description": "Stage-by-stage conversion rates" },
+        { "id": "sls_lead_response_time", "name": "Lead Response Time", "formula": "AVG(first_contact - created)", "unit": "days", "chart_type": "kpi", "higher_is_better": false, "description": "Time from lead arrival to first sales touch" },
+        { "id": "sls_arr", "name": "Annual Recurring Revenue", "formula": "SUM(active_subscription.annual_value)", "unit": "currency", "chart_type": "line", "higher_is_better": true, "description": "Total annualized contracted recurring revenue" },
+        { "id": "sls_arr_growth", "name": "ARR Growth Rate", "formula": "(arr_current - arr_prior) / arr_prior", "unit": "percent", "chart_type": "line", "higher_is_better": true, "alert_threshold_pct": 5.0, "description": "Period-over-period ARR change" },
+        { "id": "sls_net_revenue_retention", "name": "Net Revenue Retention", "formula": "(starting_arr + expansion - churn - contraction) / starting_arr", "unit": "percent", "chart_type": "kpi", "higher_is_better": true, "target_value": 1.1, "description": "Best-in-class SaaS NRR is 110%+" }
+      ]
+    },
+    "operations": {
+      "label": "Operations",
+      "icon": "⚙️",
+      "kpis": [
+        { "id": "ops_uptime", "name": "Service Uptime", "formula": "1 - (downtime_seconds / total_seconds)", "unit": "percent", "chart_type": "kpi", "higher_is_better": true, "target_value": 0.999, "description": "Percentage of time service is available" },
+        { "id": "ops_mttr", "name": "Mean Time To Recovery", "formula": "AVG(resolved_at - incident_started)", "unit": "minutes", "chart_type": "line", "higher_is_better": false, "description": "Average time to recover from an incident" },
+        { "id": "ops_mtbf", "name": "Mean Time Between Failures", "formula": "AVG(time_between_incidents)", "unit": "days", "chart_type": "line", "higher_is_better": true, "description": "Average operational period between failures" },
+        { "id": "ops_throughput", "name": "Throughput (per hour)", "formula": "COUNT(transactions) / hours", "unit": "number", "chart_type": "line", "higher_is_better": true, "description": "Operations completed per hour" },
+        { "id": "ops_error_rate", "name": "Error Rate", "formula": "COUNT(errors) / COUNT(requests)", "unit": "percent", "chart_type": "line", "higher_is_better": false, "alert_threshold_pct": 1.0, "description": "Failed operations as a fraction of total" },
+        { "id": "ops_p95_latency", "name": "P95 Latency", "formula": "PERCENTILE(latency_ms, 0.95)", "unit": "ms", "chart_type": "line", "higher_is_better": false, "description": "95th-percentile request latency" },
+        { "id": "ops_inventory_turnover", "name": "Inventory Turnover", "formula": "SUM(cogs) / AVG(inventory_value)", "unit": "ratio", "chart_type": "bar", "higher_is_better": true, "description": "How often inventory is sold and replaced" },
+        { "id": "ops_capacity_utilization", "name": "Capacity Utilization", "formula": "actual_output / max_capacity", "unit": "percent", "chart_type": "line", "higher_is_better": true, "description": "Percent of total capacity in active use" }
+      ]
+    },
+    "hr": {
+      "label": "People & HR",
+      "icon": "👥",
+      "kpis": [
+        { "id": "hr_headcount", "name": "Total Headcount", "formula": "COUNT(active_employees)", "unit": "number", "chart_type": "line", "higher_is_better": true, "description": "Active employee count" },
+        { "id": "hr_attrition_rate", "name": "Attrition Rate (Annualized)", "formula": "12 * COUNT(departures last_month) / AVG(headcount last_month)", "unit": "percent", "chart_type": "line", "higher_is_better": false, "alert_threshold_pct": 2.0, "description": "Annualized rate of employee departures" },
+        { "id": "hr_voluntary_attrition", "name": "Voluntary Attrition", "formula": "COUNT(voluntary_departures) / AVG(headcount)", "unit": "percent", "chart_type": "bar", "higher_is_better": false, "description": "Departures initiated by the employee" },
+        { "id": "hr_time_to_hire", "name": "Time to Hire (Days)", "formula": "AVG(start_date - requisition_open_date)", "unit": "days", "chart_type": "line", "higher_is_better": false, "description": "Average days from job requisition to first day" },
+        { "id": "hr_offer_acceptance", "name": "Offer Acceptance Rate", "formula": "COUNT(accepted_offers) / COUNT(extended_offers)", "unit": "percent", "chart_type": "kpi", "higher_is_better": true, "description": "Percent of extended offers that are accepted" },
+        { "id": "hr_engagement_score", "name": "Employee Engagement Score", "formula": "AVG(survey.engagement)", "unit": "number", "chart_type": "kpi", "higher_is_better": true, "target_value": 4.0, "description": "Average engagement survey score (1-5)" },
+        { "id": "hr_training_hours", "name": "Training Hours per Employee", "formula": "SUM(training_hours) / COUNT(employees)", "unit": "number", "chart_type": "bar", "higher_is_better": true, "description": "Average training hours per employee" },
+        { "id": "hr_diversity_pct", "name": "Diversity %", "formula": "COUNT(underrepresented) / COUNT(total)", "unit": "percent", "chart_type": "kpi", "higher_is_better": true, "description": "Composition by self-identified group" },
+        { "id": "hr_contractor_ratio", "name": "Contractor Ratio", "formula": "COUNT(contractors) / COUNT(total_workforce)", "unit": "percent", "chart_type": "line", "higher_is_better": false, "description": "Contractors as a fraction of total workforce" },
+        { "id": "hr_cost_per_hire", "name": "Cost per Hire", "formula": "SUM(recruiting_spend) / COUNT(hires)", "unit": "currency", "chart_type": "kpi", "higher_is_better": false, "description": "All-in cost of hiring one employee" }
+      ]
+    },
+    "customer": {
+      "label": "Customer",
+      "icon": "🤝",
+      "kpis": [
+        { "id": "cust_nps", "name": "Net Promoter Score", "formula": "% promoters - % detractors", "unit": "number", "chart_type": "kpi", "higher_is_better": true, "target_value": 50, "description": "Standard NPS computed from survey responses" },
+        { "id": "cust_csat", "name": "CSAT Score", "formula": "AVG(satisfaction_score)", "unit": "number", "chart_type": "line", "higher_is_better": true, "description": "Average customer satisfaction score" },
+        { "id": "cust_churn_rate", "name": "Customer Churn Rate", "formula": "COUNT(churned) / COUNT(start_period)", "unit": "percent", "chart_type": "line", "higher_is_better": false, "alert_threshold_pct": 1.0, "description": "Percent of customers leaving in a period" },
+        { "id": "cust_revenue_churn", "name": "Revenue Churn", "formula": "SUM(churned_arr) / SUM(starting_arr)", "unit": "percent", "chart_type": "line", "higher_is_better": false, "description": "Lost ARR from cancellations and downgrades" },
+        { "id": "cust_first_response_time", "name": "First Response Time", "formula": "AVG(first_response - ticket_created)", "unit": "minutes", "chart_type": "kpi", "higher_is_better": false, "description": "Time to first reply on a support ticket" },
+        { "id": "cust_resolution_time", "name": "Resolution Time", "formula": "AVG(resolved_at - ticket_created)", "unit": "hours", "chart_type": "line", "higher_is_better": false, "description": "Time from ticket open to resolution" },
+        { "id": "cust_active_users", "name": "Monthly Active Users", "formula": "COUNT(DISTINCT user_id WHERE event in last_30d)", "unit": "number", "chart_type": "line", "higher_is_better": true, "description": "Distinct users active in last 30 days" },
+        { "id": "cust_dau_mau", "name": "DAU/MAU Ratio", "formula": "DAU / MAU", "unit": "ratio", "chart_type": "kpi", "higher_is_better": true, "description": "Daily-to-monthly active user ratio (stickiness)" }
+      ]
+    },
+    "risk": {
+      "label": "Risk & Compliance",
+      "icon": "🛡️",
+      "kpis": [
+        { "id": "risk_fraud_rate", "name": "Fraud Rate", "formula": "SUM(fraud_amount) / SUM(transaction_amount)", "unit": "percent", "chart_type": "line", "higher_is_better": false, "alert_threshold_pct": 0.5, "description": "Fraud losses as a fraction of transactions" },
+        { "id": "risk_false_positive_rate", "name": "False Positive Rate (Fraud)", "formula": "COUNT(fp_alerts) / COUNT(alerts)", "unit": "percent", "chart_type": "line", "higher_is_better": false, "description": "False alerts as a fraction of total alerts" },
+        { "id": "risk_aml_alerts", "name": "AML Alerts (open)", "formula": "COUNT(open_aml_alerts)", "unit": "number", "chart_type": "kpi", "higher_is_better": false, "description": "Anti-money-laundering alerts requiring review" },
+        { "id": "risk_audit_findings", "name": "Open Audit Findings", "formula": "COUNT(audit_findings WHERE status='open')", "unit": "number", "chart_type": "kpi", "higher_is_better": false, "description": "Outstanding audit issues" },
+        { "id": "risk_security_incidents", "name": "Security Incidents", "formula": "COUNT(incidents WHERE severity>=high)", "unit": "number", "chart_type": "bar", "higher_is_better": false, "description": "High-severity security incidents this period" }
+      ]
+    },
+    "product": {
+      "label": "Product",
+      "icon": "🚀",
+      "kpis": [
+        { "id": "prod_feature_adoption", "name": "Feature Adoption Rate", "formula": "COUNT(users using feature) / COUNT(eligible users)", "unit": "percent", "chart_type": "bar", "higher_is_better": true, "description": "Adoption of a specific feature" },
+        { "id": "prod_release_frequency", "name": "Release Frequency", "formula": "COUNT(releases per month)", "unit": "number", "chart_type": "bar", "higher_is_better": true, "description": "Number of releases shipped per month" },
+        { "id": "prod_lead_time_changes", "name": "Lead Time for Changes", "formula": "AVG(deploy_time - commit_time)", "unit": "hours", "chart_type": "line", "higher_is_better": false, "description": "DORA metric — commit to production time" },
+        { "id": "prod_change_failure_rate", "name": "Change Failure Rate", "formula": "COUNT(failed_deploys) / COUNT(deploys)", "unit": "percent", "chart_type": "line", "higher_is_better": false, "description": "DORA metric — failed deploys as % of total" },
+        { "id": "prod_bug_count", "name": "Open Bugs (P0+P1)", "formula": "COUNT(bugs WHERE priority IN (P0,P1) AND status='open')", "unit": "number", "chart_type": "kpi", "higher_is_better": false, "description": "Outstanding high-priority bugs" }
+      ]
+    }
+  }
+}
