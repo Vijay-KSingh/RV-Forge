@@ -435,6 +435,32 @@ def fabric_sources():
     return {"sources": fabric.list_sources()}
 
 
+# ── Global retail warehouse (10M-row scenario) ───────────────────────
+from forge import retail_analytics
+
+
+@app.get("/api/retail/summary")
+def retail_summary():
+    if not retail_analytics.available():
+        raise HTTPException(404, "retail warehouse not generated — run data/generate_retail_global.py")
+    return retail_analytics.summary()
+
+
+@app.get("/api/retail/timeseries")
+def retail_timeseries(metric: str = "revenue"):
+    if not retail_analytics.available():
+        raise HTTPException(404, "retail warehouse not generated")
+    return {"metric": metric, "series": retail_analytics.monthly_series(metric)}
+
+
+@app.get("/api/retail/forecast")
+def retail_forecast(metric: str = "revenue", periods: int = 6):
+    if not retail_analytics.available():
+        raise HTTPException(404, "retail warehouse not generated")
+    periods = max(1, min(24, periods))
+    return retail_analytics.forecast(metric, periods)
+
+
 @app.post("/api/fabric/ask")
 def fabric_ask(body: FabricAskRequest):
     return fabric.ask(body.question)
@@ -748,5 +774,9 @@ if WIZARD_DIR.exists() and (WIZARD_DIR / "index.html").exists():
     @app.get("/fabric")
     def fabric_page():
         return FileResponse(WIZARD_DIR / "fabric.html")
+
+    @app.get("/retail")
+    def retail_page():
+        return FileResponse(WIZARD_DIR / "retail.html")
 
     app.mount("/static", StaticFiles(directory=str(WIZARD_DIR)), name="static")

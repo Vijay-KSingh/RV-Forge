@@ -41,6 +41,12 @@ fabric-down:    ## Stop the data-fabric DBs (preserves volumes)
 fabric-ps:      ## Show data-fabric DB status/health
 	docker compose -f docker/fabric/compose.yml ps
 
+retail-data:    ## Generate the 10M-row global retail warehouse (SQLite on G:)
+	python data/generate_retail_global.py
+
+test-retail:    ## Run the live global-retail scenario tests (10M rows)
+	cd platform/backend && PYTHONPATH=. python ../../test_retail_global.py
+
 down:           ## Stop everything (preserves volumes)
 	docker compose -f docker/compose.yml down
 

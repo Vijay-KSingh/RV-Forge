@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Forge — Global Retail Analytics</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0e1a;--panel:#111726;--panel-2:#161d2f;--border:#1f2940;--text:#e7ebf5;
+  --dim:#8b95ac;--muted:#5e6884;--accent:#6ce5b1;--accent-2:#9d8df1;--warn:#f5b76d;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-size:14px;}
+.mono{font-family:'JetBrains Mono',monospace;}
+.top{display:flex;justify-content:space-between;align-items:center;padding:14px 28px;border-bottom:1px solid var(--border);}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;}
+.mark{width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;color:#0a0e1a;font-weight:800;font-size:13px;}
+.wrap{max-width:1160px;margin:24px auto;padding:0 22px;}
+h1{font-size:22px;letter-spacing:-.02em;}
+.sub{color:var(--dim);margin:4px 0 20px;font-size:13px;}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;}
+.kpi{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px;}
+.kpi .v{font-size:24px;font-weight:700;letter-spacing:-.02em;}
+.kpi .l{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-top:4px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+@media(max-width:820px){.grid2{grid-template-columns:1fr;}}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px;}
+h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:12px;}
+table{border-collapse:collapse;width:100%;font-size:13px;}
+th,td{padding:7px 10px;border-bottom:1px solid var(--border);text-align:left;}
+th{color:var(--dim);font-weight:600;font-size:11px;text-transform:uppercase;}
+td.n{text-align:right;font-family:'JetBrains Mono',monospace;}
+.bar{height:6px;background:var(--panel-2);border-radius:99px;overflow:hidden;margin-top:4px;}
+.bar>div{height:100%;background:var(--accent);}
+.fc-head{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+.seg{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.seg button{background:none;border:none;color:var(--dim);padding:6px 14px;cursor:pointer;font-size:12px;}
+.seg button.on{background:var(--accent);color:#08130d;font-weight:600;}
+.chart{width:100%;height:auto;margin-top:10px;}
+.ch-actual{fill:none;stroke:var(--accent);stroke-width:2.5;}
+.ch-fc{fill:none;stroke:var(--accent-2);stroke-width:2.5;stroke-dasharray:6 5;}
+.ch-lab{font-size:9px;fill:var(--muted);text-anchor:middle;}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--dim);margin-top:8px;}
+.dot{display:inline-block;width:20px;height:0;border-top:3px solid;vertical-align:middle;margin-right:5px;}
+.badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(108,229,177,.16);color:var(--accent);}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--muted);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;}
+@keyframes sp{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="brand"><div class="mark">F</div><span>Forge</span>
+    <span style="color:var(--dim);font-weight:400;font-size:12px">— global retail analytics</span></div>
+  <a href="/" style="font-size:12px;color:var(--accent)">← Wizard</a>
+</div>
+<div class="wrap">
+  <h1>Global Clothing Retailer</h1>
+  <div class="sub">Live analytics over <span id="rowcount">…</span> sales rows · 500 stores worldwide · 1,000 SKUs
+    <span class="badge" id="qms"></span></div>
+
+  <div class="kpis" id="kpis"><div class="card"><span class="spin"></span> loading…</div></div>
+
+  <div class="grid2">
+    <div class="card"><h3>Revenue by region</h3><div id="region"></div></div>
+    <div class="card"><h3>Revenue by category</h3><div id="category"></div></div>
+  </div>
+
+  <div class="card">
+    <div class="fc-head">
+      <h3 style="margin:0">Forecast — next 6 months</h3>
+      <div class="seg" id="seg">
+        <button data-m="revenue" class="on">Revenue</button>
+        <button data-m="units">Units</button>
+      </div>
+      <span class="badge" id="fcinfo"></span>
+    </div>
+    <div id="chart"></div>
+    <div class="legend"><span><span class="dot" style="border-color:var(--accent)"></span>actual</span>
+      <span><span class="dot" style="border-color:var(--accent-2)"></span>forecast</span></div>
+  </div>
+
+  <div class="card"><h3>Top 10 SKUs by revenue</h3><div id="topskus"></div></div>
+</div>
+
+<script>
+const fmt = n => '$' + Math.round(n).toLocaleString();
+const fmtU = n => Math.round(n).toLocaleString();
+let metric = 'revenue';
+
+async function j(u){ const r = await fetch(u); if(!r.ok) throw new Error(r.status); return r.json(); }
+
+function bars(items, key, fmtFn){
+  const max = Math.max(...items.map(i => i[key]));
+  return `<table><tbody>${items.map(i => `<tr>
+    <td>${i.region || i.category}<div class="bar"><div style="width:${(i[key]/max*100).toFixed(0)}%"></div></div></td>
+    <td class="n">${fmtFn(i[key])}</td></tr>`).join('')}</tbody></table>`;
+}
+
+async function loadSummary(){
+  const d = await j('/api/retail/summary');
+  document.getElementById('rowcount').textContent = d.rows.toLocaleString();
+  document.getElementById('qms').textContent = 'dashboard ' + d.query_ms + ' ms';
+  document.getElementById('kpis').innerHTML = [
+    ['Total revenue', fmt(d.total_revenue)], ['Units sold', fmtU(d.total_units)],
+    ['Stores', d.stores], ['SKUs', d.skus], ['Sales rows', d.rows.toLocaleString()],
+  ].map(([l,v]) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+  document.getElementById('region').innerHTML = bars(d.by_region, 'revenue', fmt);
+  document.getElementById('category').innerHTML = bars(d.by_category, 'revenue', fmt);
+  document.getElementById('topskus').innerHTML = `<table>
+    <thead><tr><th>SKU</th><th>Product</th><th style="text-align:right">Revenue</th><th style="text-align:right">Units</th></tr></thead>
+    <tbody>${d.top_skus.map(s => `<tr><td class="mono">${s.sku}</td><td>${s.name}</td>
+      <td class="n">${fmt(s.revenue)}</td><td class="n">${fmtU(s.units)}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function chart(hist, fc){
+  const all = hist.concat(fc);
+  const w=1080, h=240, pad=36;
+  const vals = all.map(p=>p.value), min=Math.min(...vals)*0.9, max=Math.max(...vals)*1.05;
+  const x=i=>pad+i*(w-2*pad)/(all.length-1), y=v=>h-pad-((v-min)/(max-min))*(h-2*pad);
+  const hp = hist.map((p,i)=>`${x(i)},${y(p.value)}`).join(' ');
+  const fp = [hist[hist.length-1]].concat(fc).map((p,i)=>`${x(hist.length-1+i)},${y(p.value)}`).join(' ');
+  const labs = all.filter((_,i)=>i%3===0).map((p,i2)=>{const i=i2*3;return `<text class="ch-lab" x="${x(i)}" y="${h-12}">${p.month}</text>`;}).join('');
+  return `<svg class="chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
+    <polyline class="ch-actual" points="${hp}"/><polyline class="ch-fc" points="${fp}"/>${labs}</svg>`;
+}
+
+async function loadForecast(){
+  document.getElementById('chart').innerHTML = '<span class="spin"></span> forecasting…';
+  const d = await j('/api/retail/forecast?metric='+metric+'&periods=6');
+  document.getElementById('fcinfo').textContent = d.method + ' · fit ' + d.fit_ms + ' ms';
+  document.getElementById('chart').innerHTML = chart(d.history, d.forecast);
+}
+
+document.getElementById('seg').addEventListener('click', e=>{
+  if(!e.target.dataset.m) return;
+  metric = e.target.dataset.m;
+  [...document.querySelectorAll('#seg button')].forEach(b=>b.classList.toggle('on', b.dataset.m===metric));
+  loadForecast();
+});
+
+loadSummary().catch(e=>document.getElementById('kpis').innerHTML='<div class="card">Warehouse not generated — run data/generate_retail_global.py</div>');
+loadForecast().catch(()=>{});
+</script>
+</body>
+</html>
