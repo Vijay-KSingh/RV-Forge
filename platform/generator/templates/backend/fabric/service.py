@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 from decimal import Decimal
 from pathlib import Path
@@ -42,6 +43,33 @@ def _clean(v):
     if isinstance(v, float):
         return round(v, 2)
     return v
+
+
+_WRITE_KEYWORDS = re.compile(
+    r"\b(insert|update|delete|drop|alter|truncate|create|grant|revoke|attach|merge|call|replace)\b")
+
+
+def _assert_readonly(sql: str) -> None:
+    """Customer-defined SQL must be a single read-only SELECT — the app runs it
+    on behalf of end users, so writes/DDL are rejected."""
+    s = sql.strip().rstrip(";").strip()
+    low = s.lower()
+    if ";" in s:
+        raise ValueError("only a single statement is allowed")
+    if not (low.startswith("select") or low.startswith("with")):
+        raise ValueError("only SELECT queries are allowed")
+    if _WRITE_KEYWORDS.search(low):
+        raise ValueError("only read-only SELECT queries are allowed (no write/DDL keywords)")
+
+
+def _docs_to_table(docs: list[dict]):
+    cols: list[str] = []
+    for d in docs:
+        for k in d.keys():
+            if k not in cols:
+                cols.append(k)
+    rows = [[_clean(d.get(c)) for c in cols] for d in docs]
+    return cols, rows
 
 
 class Fabric:
@@ -144,20 +172,57 @@ class Fabric:
                 best, best_score = key, score
         return best
 
+    def _intent_pool(self, conn: dict):
+        """Built-in catalog intents + the connection's own custom queries."""
+        intents: dict = {}
+        default = None
+        cat = CATALOGS.get(conn.get("catalog"))
+        if cat:
+            coll = cat.get("collection", "patients")
+            for k, v in cat["intents"].items():
+                intents[k] = dict(v, _collection=coll)
+            default = cat["default"]
+        for qd in conn.get("queries", []):
+            name = qd.get("name")
+            if name:
+                intents[name] = dict(qd)
+                if default is None:
+                    default = name
+        return intents, default
+
+    def _run_intent(self, engine, intent: dict):
+        if intent.get("sql"):
+            _assert_readonly(intent["sql"])
+            cols, rows = engine.query(intent["sql"])
+            return cols, [[_clean(v) for v in r] for r in rows], intent["sql"]
+        if intent.get("op"):  # declarative catalog doc intent
+            coll = intent.get("_collection", "patients")
+            cols, rows, qtext = run_doc_intent(engine.collection(coll), intent)
+            return cols, rows, qtext.replace("{coll}", coll)
+        if intent.get("aggregate") is not None:
+            if not hasattr(engine, "aggregate"):
+                raise ValueError("custom Mongo queries require a live MongoDB connection")
+            coll = intent.get("collection", "patients")
+            cols, rows = _docs_to_table(engine.aggregate(coll, intent["aggregate"]))
+            return cols, rows, f"db.{coll}.aggregate({json.dumps(intent['aggregate'])})"
+        if intent.get("find") is not None:
+            if not hasattr(engine, "find_docs"):
+                raise ValueError("custom Mongo queries require a live MongoDB connection")
+            coll = intent.get("collection", "patients")
+            docs = engine.find_docs(coll, intent["find"], intent.get("sort"),
+                                    intent.get("limit"), intent.get("projection"))
+            cols, rows = _docs_to_table(docs)
+            return cols, rows, f"db.{coll}.find({json.dumps(intent['find'])})"
+        raise ValueError("query has no sql / find / aggregate")
+
     def _execute(self, engine, conn: dict, question: str):
         q = question.lower()
-        cat = CATALOGS.get(conn.get("catalog"))
-        if cat and engine.kind == "sql":
-            key = self._pick_intent(cat["intents"], cat["default"], q)
-            intent = cat["intents"][key]
-            cols, rows = engine.query(intent["sql"])
-            return cols, [[_clean(v) for v in r] for r in rows], intent["sql"], key
-        if cat and engine.kind == "doc":
-            key = self._pick_intent(cat["intents"], cat["default"], q)
-            coll = cat.get("collection", "patients")
-            cols, rows, qtext = run_doc_intent(engine.collection(coll), cat["intents"][key])
-            return cols, rows, qtext.replace("{coll}", coll), key
-        # ── generic introspection (customer-added connection, no catalog) ──
+        intents, default = self._intent_pool(conn)
+        if intents:
+            key = self._pick_intent(intents, default or next(iter(intents)), q)
+            cols, rows, query = self._run_intent(engine, intents[key])
+            return cols, rows, query, key
+        # ── generic introspection (customer-added connection, no catalog/queries) ──
         if engine.kind == "sql":
             tables = list(engine.table_info().keys())
             gintents = generic_sql_intents(tables)
@@ -195,7 +260,14 @@ class Fabric:
                     "candidates": [{"domain": self._resolved[c]["conn"].get("label", c), "score": s}
                                    for c, s in scores], "rows": [], "columns": [], "row_count": 0}
 
-        cols, rows, query, intent_key = self._execute(engine, conn, question)
+        try:
+            cols, rows, query, intent_key = self._execute(engine, conn, question)
+        except Exception as e:  # bad custom query / unreachable mid-flight
+            return {"question": question, "domain": conn.get("label", top_id), "source": top_id,
+                    "engine": conn["engine"], "mode": mode, "error": str(e),
+                    "explanation": f"Routed to {conn.get('label', top_id)} but the query failed: {e}",
+                    "candidates": [{"domain": self._resolved[c]["conn"].get("label", c), "score": s}
+                                   for c, s in scores], "rows": [], "columns": [], "row_count": 0}
         where = {"docker": "live", "embedded": "embedded (demo)"}.get(mode, mode)
         return {
             "question": question, "domain": conn.get("label", top_id), "source": top_id,
@@ -223,6 +295,8 @@ class Fabric:
             "mode": r.get("mode", "offline"),
             "tables": eng.table_info() if eng else {},
             "total_rows": eng.count_all() if eng else 0,
+            "queries": conn.get("queries", []),
+            "has_catalog": bool(conn.get("catalog")),
         }
 
     def list_sources(self) -> list[dict]:
@@ -264,10 +338,14 @@ class Fabric:
             record["password"] = payload["password"]
         if payload.get("catalog"):
             record["catalog"] = payload["catalog"]
+        if payload.get("queries") is not None:
+            record["queries"] = payload["queries"]
         if existing:
-            # preserve demo/catalog flags unless overridden
+            # preserve demo/catalog/queries unless overridden
             record.setdefault("catalog", existing.get("catalog"))
             record["demo"] = existing.get("demo", False)
+            if "queries" not in record and existing.get("queries"):
+                record["queries"] = existing["queries"]
             conns[conns.index(existing)] = record
         else:
             conns.append(record)
@@ -282,6 +360,61 @@ class Fabric:
         self._write_config(cfg)
         self.reload()
         return {"deleted": before - len(cfg["connections"])}
+
+    # ── per-connection custom queries (customer-defined intents) ──────
+    def _find_conn(self, cfg: dict, cid: str) -> dict:
+        conn = next((c for c in cfg.get("connections", []) if c["id"] == cid), None)
+        if not conn:
+            raise ValueError("connection not found")
+        return conn
+
+    @staticmethod
+    def _normalize_query(query: dict) -> dict:
+        name = str(query.get("name", "")).strip()
+        if not name:
+            raise ValueError("query 'name' is required")
+        has_body = query.get("sql") or query.get("find") is not None or query.get("aggregate") is not None
+        if not has_body:
+            raise ValueError("provide 'sql' (SQL) or 'find'/'aggregate' (MongoDB)")
+        if query.get("sql"):
+            _assert_readonly(query["sql"])
+        record = {"name": name, "keywords": query.get("keywords", [])}
+        for f in ("sql", "collection", "find", "aggregate", "sort", "limit", "projection"):
+            if query.get(f) is not None:
+                record[f] = query[f]
+        return record
+
+    def add_query(self, cid: str, query: dict) -> dict:
+        record = self._normalize_query(query)
+        cfg = self._read_config()
+        conn = self._find_conn(cfg, cid)
+        qs = conn.setdefault("queries", [])
+        existing = next((q for q in qs if q.get("name") == record["name"]), None)
+        if existing:
+            qs[qs.index(existing)] = record
+        else:
+            qs.append(record)
+        self._write_config(cfg)
+        self.reload()
+        return record
+
+    def delete_query(self, cid: str, name: str) -> dict:
+        cfg = self._read_config()
+        conn = self._find_conn(cfg, cid)
+        before = len(conn.get("queries", []))
+        conn["queries"] = [q for q in conn.get("queries", []) if q.get("name") != name]
+        self._write_config(cfg)
+        self.reload()
+        return {"deleted": before - len(conn.get("queries", []))}
+
+    def test_query(self, cid: str, query: dict) -> dict:
+        self.ensure_loaded()
+        r = self._resolved.get(cid)
+        if not r or r.get("engine") is None:
+            raise ValueError("connection is offline — cannot run the query")
+        record = self._normalize_query(query)
+        cols, rows, qtext = self._run_intent(r["engine"], record)
+        return {"columns": cols, "rows": rows[:25], "row_count": len(rows), "query": qtext}
 
 
 fabric = Fabric()

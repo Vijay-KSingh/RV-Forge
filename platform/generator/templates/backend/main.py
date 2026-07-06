@@ -186,6 +186,44 @@ def delete_connection(cid: str):
     return fabric.delete_connection(cid)
 
 
+class QueryPayload(BaseModel):
+    name: str
+    keywords: list[str] = []
+    sql: str | None = None
+    collection: str | None = None
+    find: dict | None = None
+    aggregate: list | None = None
+    sort: dict | None = None
+    limit: int | None = None
+    projection: dict | None = None
+
+
+@app.post("/api/connections/{cid}/queries")
+def add_query(cid: str, body: QueryPayload):
+    try:
+        return fabric.add_query(cid, body.model_dump(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/connections/{cid}/queries/test")
+def test_query(cid: str, body: QueryPayload):
+    try:
+        return fabric.test_query(cid, body.model_dump(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:  # noqa: BLE001 — surface a clean error to the UI
+        raise HTTPException(422, str(e))
+
+
+@app.delete("/api/connections/{cid}/queries/{name}")
+def delete_query(cid: str, name: str):
+    try:
+        return fabric.delete_query(cid, name)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
 @app.get("/api/insights/digest")
 def digest():
     """Returns the latest proactive digest. Stub for the generated app —

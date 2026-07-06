@@ -135,6 +135,26 @@ class RealDocEngine:
         client.close()
         return docs
 
+    def aggregate(self, name: str, pipeline: list) -> list[dict]:
+        client = self._client()
+        docs = list(client[self._dbname][name].aggregate(pipeline))
+        client.close()
+        for d in docs:  # stringify a non-scalar group key so it renders in a table
+            if "_id" in d and not isinstance(d["_id"], (str, int, float, bool)):
+                d["_id"] = str(d["_id"])
+        return docs
+
+    def find_docs(self, name: str, flt: dict, sort=None, limit=None, projection=None) -> list[dict]:
+        client = self._client()
+        cur = client[self._dbname][name].find(flt or {}, projection or {"_id": 0})
+        if sort:
+            cur = cur.sort(list(sort.items()) if isinstance(sort, dict) else sort)
+        if limit:
+            cur = cur.limit(int(limit))
+        docs = list(cur)
+        client.close()
+        return docs
+
     def table_info(self) -> dict:
         client = self._client()
         db = client[self._dbname]

@@ -291,11 +291,24 @@ const connEl = document.getElementById('connections');
 const ENGINES = ['postgresql', 'mysql', 'mongodb'];
 let editingId = null;
 
+function queryRow(c, q) {
+  return `<div class="q-row" data-q="${escapeHtml(q.name)}">
+    <div><code>${escapeHtml(q.name)}</code>
+      <span class="muted" style="font-size:11px">${escapeHtml((q.keywords || []).join(', '))}</span></div>
+    <div>
+      <button class="btn-link q-run">Run</button>
+      <button class="btn-link q-edit">Edit</button>
+      <button class="btn-link q-del">Delete</button>
+    </div>
+  </div>`;
+}
+
 function connCard(c) {
   const modeBadge = c.mode === 'docker' ? '<span class="cmode live">● live</span>'
     : c.mode === 'embedded' ? '<span class="cmode emb">demo data</span>'
     : '<span class="cmode off">offline</span>';
   const conn = `${escapeHtml(c.engine)}://${escapeHtml(c.user || '')}@${escapeHtml(c.host || '')}:${c.port || ''}/${escapeHtml(c.database || '')}`;
+  const qs = (c.queries || []).map(q => queryRow(c, q)).join('');
   return `<div class="conn" data-id="${escapeHtml(c.id)}">
     <div class="conn-head">
       <div><strong>${escapeHtml(c.label || c.id)}</strong> ${modeBadge}
@@ -308,7 +321,65 @@ function connCard(c) {
     </div>
     <div class="conn-str mono">${conn} · <b>${c.total_rows}</b> rows</div>
     <div class="conn-test-out"></div>
+    <div class="q-block">
+      <div class="q-head">Custom queries ${c.has_catalog ? '<span class="muted">(+ built-in)</span>' : ''}
+        <button class="btn-link add-query">+ Add query</button></div>
+      <div class="q-list">${qs || '<span class="muted" style="font-size:12px">None yet — add a named query the agent can route to.</span>'}</div>
+      <div class="q-form-slot"></div>
+    </div>
   </div>`;
+}
+
+function queryForm(engine, q) {
+  q = q || { keywords: [] };
+  const isMongo = engine === 'mongodb';
+  const body = isMongo
+    ? `<label class="cf-wide">Collection <input name="collection" value="${escapeHtml(q.collection || '')}" placeholder="patients"></label>
+       <label class="cf-wide">Type
+         <select name="qtype">
+           <option value="find" ${q.find ? 'selected' : ''}>find (filter)</option>
+           <option value="aggregate" ${q.aggregate ? 'selected' : ''}>aggregate (pipeline)</option>
+         </select></label>
+       <label class="cf-wide">JSON
+         <textarea name="qjson" rows="4" placeholder='{"age": {"$gte": 60}}  or  [{"$group": {"_id": "$dept", "n": {"$sum": 1}}}]'>${escapeHtml(q.find ? JSON.stringify(q.find, null, 2) : q.aggregate ? JSON.stringify(q.aggregate, null, 2) : '')}</textarea></label>`
+    : `<label class="cf-wide">SQL (SELECT only)
+         <textarea name="sql" rows="4" placeholder="SELECT ... FROM ... WHERE ... LIMIT 25">${escapeHtml(q.sql || '')}</textarea></label>`;
+  return `<div class="q-form">
+    <div class="cf-grid">
+      <label>Name <input name="name" value="${escapeHtml(q.name || '')}" ${q.name ? 'readonly' : ''} placeholder="top_customers"></label>
+      <label>Keywords (comma-sep) <input name="keywords" value="${escapeHtml((q.keywords || []).join(', '))}" placeholder="top customer, biggest"></label>
+      ${body}
+    </div>
+    <div class="cf-actions">
+      <button class="btn-link qf-test">Run preview</button>
+      <span class="qf-msg"></span>
+      <span style="flex:1"></span>
+      <button class="btn qf-cancel">Cancel</button>
+      <button class="btn qf-save" style="background:{{PRIMARY_COLOR}};color:#fff">Save query</button>
+    </div>
+    <div class="qf-preview"></div>
+  </div>`;
+}
+
+function queryValues(form, engine) {
+  const g = n => { const el = form.querySelector(`[name="${n}"]`); return el ? el.value.trim() : ''; };
+  const v = { name: g('name'), keywords: g('keywords').split(',').map(s => s.trim()).filter(Boolean) };
+  if (engine === 'mongodb') {
+    if (g('collection')) v.collection = g('collection');
+    const raw = g('qjson');
+    if (raw) { const parsed = JSON.parse(raw); if (g('qtype') === 'aggregate') v.aggregate = parsed; else v.find = parsed; }
+  } else {
+    v.sql = g('sql');
+  }
+  return v;
+}
+
+function previewTable(d) {
+  if (!d.rows || !d.rows.length) return '<div class="muted" style="margin-top:8px">No rows.</div>';
+  return `<div class="table-wrap" style="margin-top:10px"><table class="data-table">
+    <thead><tr>${d.columns.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
+    <tbody>${d.rows.map(r => `<tr>${r.map(v => `<td>${escapeHtml(v)}</td>`).join('')}</tr>`).join('')}</tbody>
+  </table></div>`;
 }
 
 function connForm(c) {
@@ -350,13 +421,17 @@ function formValues(form) {
   return v;
 }
 
+let CONNS = {};
 async function renderConnections() {
   if (!connEl) return;
   try {
     const d = await fetchJSON('/api/connections');
+    CONNS = {};
+    d.connections.forEach(c => { CONNS[c.id] = c; });
     connEl.innerHTML = d.connections.map(connCard).join('') || '<div class="muted">No connections yet.</div>';
   } catch (e) { connEl.innerHTML = `<div class="route-err">Could not load connections: ${escapeHtml(e.message)}</div>`; }
 }
+function connOf(el) { const card = el.closest('.conn'); return card ? CONNS[card.getAttribute('data-id')] : null; }
 
 async function saveConn(values) {
   return fetchJSON('/api/connections', {
@@ -414,6 +489,57 @@ if (connEl) {
       const msg = form.querySelector('.cf-msg'); msg.textContent = 'Saving…';
       try { await saveConn(formValues(form)); renderConnections(); }
       catch (err) { msg.innerHTML = `<span class="bad">${escapeHtml(err.message)}</span>`; }
+    }
+
+    // ── custom query actions ──────────────────────────────────────
+    const conn = card ? CONNS[card.getAttribute('data-id')] : null;
+    if (btn.classList.contains('add-query') && conn) {
+      const slot = card.querySelector('.q-form-slot');
+      if (!slot.querySelector('.q-form')) slot.innerHTML = queryForm(conn.engine, null);
+    }
+    if (btn.classList.contains('q-edit') && conn) {
+      const name = btn.closest('.q-row').getAttribute('data-q');
+      const q = (conn.queries || []).find(x => x.name === name);
+      card.querySelector('.q-form-slot').innerHTML = queryForm(conn.engine, q);
+    }
+    if (btn.classList.contains('q-del') && conn) {
+      const name = btn.closest('.q-row').getAttribute('data-q');
+      if (!confirm(`Delete query "${name}"?`)) return;
+      await fetchJSON(`/api/connections/${encodeURIComponent(conn.id)}/queries/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      renderConnections();
+    }
+    if (btn.classList.contains('q-run') && conn) {
+      const name = btn.closest('.q-row').getAttribute('data-q');
+      const q = (conn.queries || []).find(x => x.name === name);
+      const slot = card.querySelector('.q-form-slot');
+      slot.innerHTML = '<div class="muted">Running…</div>';
+      try { const r = await fetchJSON(`/api/connections/${encodeURIComponent(conn.id)}/queries/test`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(q) });
+        slot.innerHTML = `<pre class="query">${escapeHtml(r.query)}</pre>${previewTable(r)}`;
+      } catch (err) { slot.innerHTML = `<span class="bad">${escapeHtml(err.message)}</span>`; }
+    }
+
+    const qform = btn.closest('.q-form');
+    if (qform && conn) {
+      const msg = qform.querySelector('.qf-msg');
+      if (btn.classList.contains('qf-cancel')) { renderConnections(); }
+      if (btn.classList.contains('qf-test')) {
+        msg.textContent = 'Running…';
+        try {
+          const r = await fetchJSON(`/api/connections/${encodeURIComponent(conn.id)}/queries/test`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(queryValues(qform, conn.engine)) });
+          msg.innerHTML = `<span class="ok">✓ ${r.row_count} row(s)</span>`;
+          qform.querySelector('.qf-preview').innerHTML = previewTable(r);
+        } catch (err) { msg.innerHTML = `<span class="bad">✕ ${escapeHtml(err.message)}</span>`; }
+      }
+      if (btn.classList.contains('qf-save')) {
+        msg.textContent = 'Saving…';
+        try {
+          await fetchJSON(`/api/connections/${encodeURIComponent(conn.id)}/queries`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(queryValues(qform, conn.engine)) });
+          renderConnections();
+        } catch (err) { msg.innerHTML = `<span class="bad">✕ ${escapeHtml(err.message)}</span>`; }
+      }
     }
   });
 }

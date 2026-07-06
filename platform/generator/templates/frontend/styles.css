@@ -142,3 +142,17 @@ pre.query { background: #0f172a; color: #cbd5e1; border-radius: 8px; padding: 10
 .cf-msg { font-size: 12px; }
 .btn { padding: 8px 16px; border: 1px solid #d1d5db; background: white; border-radius: 8px;
   cursor: pointer; font-weight: 500; font-size: 13px; }
+
+/* ── Custom queries per connection ───────────────────────────────── */
+.q-block { margin-top: 12px; border-top: 1px dashed #e5e7eb; padding-top: 10px; }
+.q-head { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 600;
+  color: #374151; margin-bottom: 8px; }
+.q-list { display: flex; flex-direction: column; gap: 6px; }
+.q-row { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 7px 10px; background: #f9fafb; border-radius: 7px; font-size: 13px; }
+.q-row code { font-family: ui-monospace, monospace; color: {{ACCENT_COLOR}}; }
+.q-row > div:last-child { display: flex; gap: 10px; }
+.q-form { border: 1px solid {{ACCENT_COLOR}}55; border-radius: 9px; padding: 12px; margin-top: 10px; background: #fff; }
+.q-form textarea { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 7px;
+  font-family: ui-monospace, monospace; font-size: 12px; resize: vertical; }
+.qf-msg { font-size: 12px; }
