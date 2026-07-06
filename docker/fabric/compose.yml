@@ -1,0 +1,62 @@
+# Real database servers for the Forge data fabric.
+# Postgres hosts two logical DBs (finance + banking); MySQL hosts retail;
+# Mongo hosts healthcare. Data is populated from Python (fabric/real_seed.py)
+# using the same seed rows as the embedded engines.
+name: forge-fabric
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: forge-fabric-postgres
+    environment:
+      POSTGRES_USER: forge
+      POSTGRES_PASSWORD: ${FABRIC_DB_PASSWORD:-forge_fabric_pwd}
+      POSTGRES_DB: finance
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forge -d finance"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mysql:
+    image: mysql:8
+    container_name: forge-fabric-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${FABRIC_DB_PASSWORD:-forge_fabric_pwd}
+      MYSQL_DATABASE: retail
+      MYSQL_USER: forge
+      MYSQL_PASSWORD: ${FABRIC_DB_PASSWORD:-forge_fabric_pwd}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysqldata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uforge", "-p${FABRIC_DB_PASSWORD:-forge_fabric_pwd}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mongo:
+    image: mongo:7
+    container_name: forge-fabric-mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: forge
+      MONGO_INITDB_ROOT_PASSWORD: ${FABRIC_DB_PASSWORD:-forge_fabric_pwd}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  pgdata:
+  mysqldata:
+  mongodata:

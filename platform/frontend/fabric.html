@@ -72,6 +72,9 @@ tbody tr:hover{background:var(--panel-2);}
 .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--text-muted);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;}
 @keyframes sp{to{transform:rotate(360deg);}}
 .empty{color:var(--text-muted);text-align:center;padding:40px 0;}
+.mode{font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;}
+.mode.live{background:rgba(108,229,177,.16);color:var(--accent);}
+.mode.emb{background:var(--panel-2);color:var(--text-muted);}
 </style>
 </head>
 <body>
@@ -126,11 +129,14 @@ async function loadSources(){
     document.getElementById('sources').innerHTML = d.sources.map(s=>{
       const tables = Object.entries(s.tables).map(([t,info])=>
         `<span>${esc(t)} <b style="color:var(--text-dim)">${info.rows}</b></span>`).join('');
+      const mode = s.mode === 'docker'
+        ? '<span class="mode live">● live docker</span>'
+        : '<span class="mode emb">embedded</span>';
       return `<div class="src">
         <div class="src-head"><span class="src-name">${esc(s.domain)}</span>
           <span class="eng ${esc(s.engine)}">${esc(s.engine)}</span></div>
         <div class="src-conn">${esc(s.connection)}</div>
-        <div class="src-tables">${tables} · <b>${s.total_rows}</b> rows</div>
+        <div class="src-tables">${tables} · <b>${s.total_rows}</b> rows · ${mode}</div>
       </div>`;
     }).join('');
   }catch(e){ document.getElementById('sources').innerHTML = '<div class="err">Could not load sources</div>'; }
@@ -157,6 +163,7 @@ function renderResult(d){
       <div class="route">
         <span class="to">Agent routed to</span>
         <span class="badge ${esc(d.engine)}">${esc(d.engine)} · ${esc(d.domain)}</span>
+        <span class="mode ${d.mode === 'docker' ? 'live' : 'emb'}">${d.mode === 'docker' ? '● live docker' : 'embedded'}</span>
         <span class="conf">${d.fallback ? 'no strong match (default)' : d.confidence + '% confidence'}</span>
       </div>
       <div class="explain">${esc(d.explanation)}</div>

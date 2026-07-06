@@ -32,6 +32,15 @@ dev:            ## Run the API + wizard natively (no Docker) — sets up venv on
 dev-core:       ## Native run with only core deps (no ML libraries)
 	./run.sh --core
 
+fabric-up:      ## Start the data-fabric DBs (postgres + mysql + mongo)
+	docker compose -f docker/fabric/compose.yml up -d
+
+fabric-down:    ## Stop the data-fabric DBs (preserves volumes)
+	docker compose -f docker/fabric/compose.yml down
+
+fabric-ps:      ## Show data-fabric DB status/health
+	docker compose -f docker/fabric/compose.yml ps
+
 down:           ## Stop everything (preserves volumes)
 	docker compose -f docker/compose.yml down
 

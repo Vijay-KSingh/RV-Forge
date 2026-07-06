@@ -33,3 +33,9 @@ prophet==1.3.0
 
 # Experiment tracking + model registry (opt-in via MLFLOW_TRACKING_URI).
 mlflow==3.13.0
+
+# Data fabric — real DB drivers (optional; the fabric falls back to embedded
+# SQLite/doc engines when the Docker DBs or these drivers are unavailable).
+psycopg2-binary==2.9.12
+PyMySQL==1.2.0
+pymongo==4.17.0
