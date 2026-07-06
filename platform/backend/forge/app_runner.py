@@ -11,8 +11,10 @@ status, and stop. It is deliberately dependency-free (stdlib only).
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -30,11 +32,82 @@ _STATIC_SERVER = Path(__file__).with_name("_static_server.py")
 _HEALTH_TIMEOUT_S = 25
 _DEFAULT_BACKEND_PORT = 8000
 _DEFAULT_FRONTEND_PORT = 3000
+_IS_WINDOWS = os.name == "nt"
+# Records of launched child processes, so a fresh Forge can reap orphans left
+# behind by a previously force-killed one. Lives inside generated_apps/ (gitignored).
+_DEFAULT_STATE_FILE = Path(__file__).resolve().parents[3] / "generated_apps" / ".forge_runs.json"
 
 
 def _port_free(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(("127.0.0.1", port)) != 0
+
+
+def _pids_on_port(port: int) -> set:
+    """PIDs currently LISTENING on ``port`` (best-effort, per-OS). Used to
+    verify a recorded orphan is still the process holding its port before we
+    kill it — which makes killing a recycled PID essentially impossible."""
+    pids: set = set()
+    try:
+        if _IS_WINDOWS:
+            out = subprocess.run(["netstat", "-ano", "-p", "TCP"],
+                                 capture_output=True, text=True, timeout=8).stdout
+            needle = f":{port} "
+            for line in out.splitlines():
+                if needle in line and "LISTENING" in line:
+                    parts = line.split()
+                    if parts and parts[-1].isdigit():
+                        pids.add(int(parts[-1]))
+        else:
+            out = subprocess.run(["lsof", "-ti", f"tcp:{port}", "-sTCP:LISTEN"],
+                                 capture_output=True, text=True, timeout=8).stdout
+            pids = {int(t) for t in out.split() if t.isdigit()}
+    except Exception:
+        log.debug("port scan for %s failed", port, exc_info=True)
+    return pids
+
+
+def _kill_tree(pid: int) -> None:
+    """Kill a process *and its children*. On Windows `python -m uvicorn` runs
+    the real server as a child of the launcher, so we must take the whole tree
+    (/T) — terminating just the launcher leaves the server orphaned."""
+    try:
+        if _IS_WINDOWS:
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                           capture_output=True, timeout=8)
+        else:
+            os.kill(pid, signal.SIGTERM)
+            time.sleep(0.4)
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+    except Exception:
+        log.debug("kill tree %s ignored", pid, exc_info=True)
+
+
+_OUR_SIGNATURES = ("uvicorn", "_static_server", "main:app")
+
+
+def _cmdline(pid: int) -> str:
+    try:
+        if _IS_WINDOWS:
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 f"(Get-CimInstance Win32_Process -Filter 'ProcessId={pid}')"
+                 f".CommandLine"],
+                capture_output=True, text=True, timeout=8).stdout
+            return out or ""
+        return Path(f"/proc/{pid}/cmdline").read_text(errors="replace").replace("\0", " ")
+    except Exception:
+        return ""
+
+
+def _looks_like_ours(pid: int) -> bool:
+    """True if the process holding a port is a generated-app server we launched
+    (guards against killing an unrelated process that reused the port)."""
+    cl = _cmdline(pid).lower()
+    return any(sig in cl for sig in _OUR_SIGNATURES)
 
 
 def _pick_port(preferred: int) -> int:
@@ -56,9 +129,60 @@ def _child_env() -> dict:
 class AppRunner:
     """Tracks the native processes for each running generated app."""
 
-    def __init__(self) -> None:
+    def __init__(self, state_file: Path | None = None) -> None:
         self._apps: dict[str, dict] = {}
         self._lock = threading.Lock()
+        self._state_file = state_file or _DEFAULT_STATE_FILE
+
+    # ── crash-safe run registry ──────────────────────────────────────
+    def _persist(self) -> None:
+        """Write the PIDs/ports of live apps so a future Forge can reap them.
+        Call while holding the lock."""
+        records = {
+            app_id: {
+                "backend_pid": rec["meta"].get("backend_pid"),
+                "frontend_pid": rec["meta"].get("frontend_pid"),
+                "backend_port": rec["meta"].get("backend_port"),
+                "frontend_port": rec["meta"].get("frontend_port"),
+                "started_at": rec["meta"].get("started_at"),
+            }
+            for app_id, rec in self._apps.items()
+        }
+        try:
+            self._state_file.parent.mkdir(parents=True, exist_ok=True)
+            self._state_file.write_text(json.dumps(records, indent=2), encoding="utf-8")
+        except OSError:
+            log.debug("could not persist run state", exc_info=True)
+
+    def reap_orphans(self) -> None:
+        """Kill generated-app servers left over from a force-killed Forge.
+
+        Keyed on the *port* we recorded, not the PID: the real server runs under
+        a different PID than the launcher we tracked, and after a crash the tree
+        is broken. We kill whoever now holds a recorded port, but only if its
+        command line matches one of our servers — so an unrelated process that
+        happened to reuse the port is left alone."""
+        try:
+            records = json.loads(self._state_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            records = {}
+        ports = set()
+        for rec in (records or {}).values():
+            for port_key in ("backend_port", "frontend_port"):
+                if rec.get(port_key):
+                    ports.add(int(rec[port_key]))
+        reaped = 0
+        for port in ports:
+            for pid in _pids_on_port(port):
+                if _looks_like_ours(pid):
+                    _kill_tree(pid)
+                    reaped += 1
+        if reaped:
+            log.info("Reaped %d orphaned generated-app process(es) from a prior run", reaped)
+        try:
+            self._state_file.unlink()  # this process owns nothing yet
+        except OSError:
+            pass
 
     # ── queries ──────────────────────────────────────────────────────
     def _alive(self, rec: dict) -> bool:
@@ -147,6 +271,7 @@ class AppRunner:
 
         with self._lock:
             self._apps[app_id] = rec
+            self._persist()
         log.info("Launched generated app %s (backend %s, frontend %s)",
                  app_id, backend_port, frontend_port)
         return {"app_id": app_id, "running": True, "reused": False, **meta}
@@ -154,6 +279,7 @@ class AppRunner:
     def stop(self, app_id: str) -> dict:
         with self._lock:
             rec = self._apps.pop(app_id, None)
+            self._persist()
         if not rec:
             return {"app_id": app_id, "running": False, "stopped": False}
         self._terminate(rec)
@@ -164,6 +290,7 @@ class AppRunner:
         with self._lock:
             recs = list(self._apps.values())
             self._apps.clear()
+            self._persist()
         for rec in recs:
             self._terminate(rec)
 
@@ -183,18 +310,24 @@ class AppRunner:
         return False
 
     def _terminate(self, rec: dict) -> None:
+        meta = rec.get("meta", {})
         for key in ("backend", "frontend"):
             proc = rec.get(key)
             if not proc:
                 continue
+            _kill_tree(proc.pid)  # tree-kill: the real server is a child of the launcher
             try:
-                proc.terminate()
-                try:
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-            except Exception:  # process may already be gone
-                log.debug("terminate %s ignored", key, exc_info=True)
+                proc.wait(timeout=5)
+            except Exception:  # already gone / not waitable
+                log.debug("wait %s ignored", key, exc_info=True)
+        # Belt-and-suspenders: if a server child got reparented and survived the
+        # tree-kill, clear it by its known port too.
+        for port_key in ("backend_port", "frontend_port"):
+            port = meta.get(port_key)
+            if port:
+                for pid in _pids_on_port(int(port)):
+                    if _looks_like_ours(pid):
+                        _kill_tree(pid)
         logf = rec.get("logf")
         if logf:
             try:

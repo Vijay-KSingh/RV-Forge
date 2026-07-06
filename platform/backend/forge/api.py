@@ -417,6 +417,12 @@ def app_verify(app_id: str):
     return app_probe.run_verification(meta)
 
 
+@app.on_event("startup")
+def _reap_orphan_apps():
+    # Clean up generated-app servers a previously force-killed Forge left behind.
+    app_runner.reap_orphans()
+
+
 @app.on_event("shutdown")
 def _stop_running_apps():
     app_runner.stop_all()
