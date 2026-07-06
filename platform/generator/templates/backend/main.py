@@ -6,6 +6,7 @@ re-run the generator with an updated manifest instead.
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import os
@@ -59,6 +60,56 @@ def health():
 @app.get("/api/kpis")
 def list_kpis():
     return KPIS
+
+
+_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _kpi_by_id(kpi_id: str):
+    for k in KPIS:
+        if k.get("id") == kpi_id:
+            return k
+    return None
+
+
+def _demo_series(kpi_id: str, points: int = 12):
+    """Deterministic pseudo time-series so a KPI detail screen has a chart
+    even on the demo path (no live warehouse). Same KPI → same series."""
+    seed = int(hashlib.sha256(kpi_id.encode()).hexdigest()[:12], 16)
+    state = seed
+    def rnd():
+        nonlocal state
+        state = (state * 1103515245 + 12345) & 0x7FFFFFFF
+        return state / 0x7FFFFFFF
+    value = 40 + (seed % 400)
+    volatility = 0.04 + (seed % 12) / 100.0
+    out = []
+    for i in range(points):
+        value = max(1.0, value * (1 + (rnd() - 0.42) * volatility))
+        out.append({"t": _MONTHS[i % 12], "v": round(value, 2)})
+    return out
+
+
+@app.get("/api/kpis/{kpi_id}")
+def kpi_detail(kpi_id: str):
+    """Full detail for a single KPI: definition + a demo trend series and the
+    current value / period-over-period delta, for the drill-down screen."""
+    k = _kpi_by_id(kpi_id)
+    if not k:
+        raise HTTPException(404, "KPI not found")
+    series = _demo_series(kpi_id)
+    current = series[-1]["v"]
+    previous = series[-2]["v"] if len(series) > 1 else current
+    delta_pct = ((current - previous) / previous * 100.0) if previous else 0.0
+    return {
+        "kpi": k,
+        "series": series,
+        "current": current,
+        "previous": previous,
+        "delta_pct": round(delta_pct, 2),
+        "is_demo": True,
+    }
 
 
 @app.get("/api/audiences")

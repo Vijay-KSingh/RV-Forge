@@ -34,13 +34,29 @@ async function renderKPIs() {
     const kpis = await fetchJSON('/api/kpis');
     const el = document.getElementById('kpis');
     el.innerHTML = kpis.map(k => `
-      <div class="kpi">
-        <div class="kpi-name">${escapeHtml(k.name)}</div>
+      <div class="kpi kpi-clickable" data-kpi-id="${escapeHtml(k.id)}" role="button" tabindex="0">
+        <div class="kpi-name">${escapeHtml(k.name)} <span class="kpi-arrow">→</span></div>
         <div class="kpi-domain">${escapeHtml(k.domain || '')} · ${escapeHtml(k.unit || '')}</div>
         <div class="kpi-formula">${escapeHtml(k.formula)}</div>
       </div>
     `).join('');
   } catch (e) {}
+}
+
+// Clicking (or Enter/Space on) a KPI card opens its detail screen via the URL hash.
+const kpisEl = document.getElementById('kpis');
+if (kpisEl) {
+  const openFromCard = (card) => {
+    const id = card && card.getAttribute('data-kpi-id');
+    if (id) location.hash = 'kpi/' + encodeURIComponent(id);
+  };
+  kpisEl.addEventListener('click', (e) => openFromCard(e.target.closest('.kpi-clickable')));
+  kpisEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      const card = e.target.closest('.kpi-clickable');
+      if (card) { e.preventDefault(); openFromCard(card); }
+    }
+  });
 }
 
 async function renderDS() {
@@ -164,6 +180,91 @@ function renderUpload(d) {
     ${tableHtml}`;
 }
 
+// ── KPI drill-down screen (hash router) ─────────────────────────────
+const mainEl = document.querySelector('main');
+const detailEl = document.getElementById('detailView');
+
+function lineChart(series) {
+  const w = 640, h = 220, pad = 34;
+  const vals = series.map(p => p.v);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const span = (max - min) || 1;
+  const x = i => pad + (i * (w - 2 * pad)) / Math.max(1, series.length - 1);
+  const y = v => h - pad - ((v - min) / span) * (h - 2 * pad);
+  const pts = series.map((p, i) => `${x(i)},${y(p.v)}`).join(' ');
+  const area = `${pad},${h - pad} ${pts} ${x(series.length - 1)},${h - pad}`;
+  const dots = series.map((p, i) =>
+    `<circle cx="${x(i)}" cy="${y(p.v)}" r="3" class="ch-dot"><title>${escapeHtml(p.t)}: ${p.v}</title></circle>`).join('');
+  const labels = series.map((p, i) =>
+    `<text x="${x(i)}" y="${h - 12}" class="ch-label">${escapeHtml(p.t)}</text>`).join('');
+  return `
+    <svg class="chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
+      <polygon points="${area}" class="ch-area" />
+      <polyline points="${pts}" class="ch-line" />
+      ${dots}${labels}
+    </svg>`;
+}
+
+async function renderKpiDetail(id) {
+  detailEl.innerHTML = '<div class="card"><p class="muted">Loading…</p></div>';
+  detailEl.hidden = false;
+  if (mainEl) mainEl.hidden = true;
+  window.scrollTo(0, 0);
+  try {
+    const d = await fetchJSON('/api/kpis/' + encodeURIComponent(id));
+    const k = d.kpi || {};
+    const up = d.delta_pct >= 0;
+    const better = k.higher_is_better !== false ? up : !up;
+    const arrow = up ? '▲' : '▼';
+    detailEl.innerHTML = `
+      <div class="detail-head">
+        <a class="back" href="#">← Back to dashboard</a>
+      </div>
+      <section class="card">
+        <div class="detail-title">
+          <h1>${escapeHtml(k.name)}</h1>
+          <span class="pill">${escapeHtml(k.domain || '')} · ${escapeHtml(k.unit || '')}</span>
+        </div>
+        <div class="detail-value">
+          <div class="big">${d.current}</div>
+          <div class="delta ${better ? 'good' : 'bad'}">${arrow} ${Math.abs(d.delta_pct)}%
+            <span class="muted">vs previous period</span></div>
+        </div>
+        ${d.is_demo ? '<div class="demo-note">Showing a demo trend — connect a live data source to see real values.</div>' : ''}
+        ${lineChart(d.series || [])}
+      </section>
+      <section class="card">
+        <h2>Definition</h2>
+        <div class="def-grid">
+          <div><span class="def-k">Formula</span><code>${escapeHtml(k.formula || '')}</code></div>
+          <div><span class="def-k">Unit</span>${escapeHtml(k.unit || '—')}</div>
+          <div><span class="def-k">Domain</span>${escapeHtml(k.domain || '—')}</div>
+          <div><span class="def-k">Chart type</span>${escapeHtml(k.chart_type || 'line')}</div>
+          <div><span class="def-k">Direction</span>${k.higher_is_better === false ? 'lower is better' : 'higher is better'}</div>
+          <div><span class="def-k">Refresh</span>${escapeHtml(k.refresh_cadence || 'daily')}</div>
+          ${k.target_value != null ? `<div><span class="def-k">Target</span>${escapeHtml(String(k.target_value))}</div>` : ''}
+        </div>
+      </section>`;
+  } catch (e) {
+    detailEl.innerHTML = `<div class="detail-head"><a class="back" href="#">← Back</a></div>
+      <div class="card"><p class="upload-error">Could not load KPI: ${escapeHtml(e.message)}</p></div>`;
+  }
+}
+
+function showDashboard() {
+  detailEl.hidden = true;
+  detailEl.innerHTML = '';
+  if (mainEl) mainEl.hidden = false;
+}
+
+function route() {
+  const m = /^#kpi\/(.+)$/.exec(location.hash);
+  if (m) renderKpiDetail(decodeURIComponent(m[1]));
+  else showDashboard();
+}
+window.addEventListener('hashchange', route);
+
 renderDigest();
 renderKPIs();
 renderDS();
+route();
