@@ -1,0 +1,61 @@
+{
+  "_comment": "Data connections for this app. Edit here or via the Connections UI. The password comes from the env var named in 'password_env' (preferred); a plaintext 'password' field is also honored for local use. Demo connections fall back to embedded sample data when the real DB is unreachable.",
+  "connections": [
+    {
+      "id": "retail",
+      "label": "Retail",
+      "engine": "mysql",
+      "host": "localhost",
+      "port": 3306,
+      "database": "retail",
+      "user": "forge",
+      "password_env": "RETAIL_DB_PASSWORD",
+      "catalog": "retail",
+      "demo": true,
+      "enabled": true,
+      "keywords": ["product", "products", "order", "orders", "sale", "sales", "inventory", "stock", "category", "store", "customer", "purchase", "sku", "retail"]
+    },
+    {
+      "id": "finance",
+      "label": "Finance",
+      "engine": "postgresql",
+      "host": "localhost",
+      "port": 5432,
+      "database": "finance",
+      "user": "forge",
+      "password_env": "FINANCE_DB_PASSWORD",
+      "catalog": "finance",
+      "demo": true,
+      "enabled": true,
+      "keywords": ["revenue", "expense", "expenses", "profit", "margin", "budget", "cash", "burn", "finance", "financial", "income", "region"]
+    },
+    {
+      "id": "banking",
+      "label": "Banking",
+      "engine": "postgresql",
+      "host": "localhost",
+      "port": 5432,
+      "database": "banking",
+      "user": "forge",
+      "password_env": "BANKING_DB_PASSWORD",
+      "catalog": "banking",
+      "demo": true,
+      "enabled": true,
+      "keywords": ["account", "accounts", "balance", "transfer", "transfers", "deposit", "loan", "loans", "kyc", "fraud", "flagged", "suspicious", "aml", "bank", "banking"]
+    },
+    {
+      "id": "healthcare",
+      "label": "Healthcare",
+      "engine": "mongodb",
+      "host": "localhost",
+      "port": 27017,
+      "database": "healthcare",
+      "user": "forge",
+      "password_env": "HEALTHCARE_DB_PASSWORD",
+      "catalog": "healthcare",
+      "demo": true,
+      "enabled": true,
+      "keywords": ["patient", "patients", "diagnosis", "hospital", "admission", "admitted", "department", "doctor", "medical", "clinical", "disease", "health", "healthcare"]
+    }
+  ]
+}

@@ -16,6 +16,8 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from fabric import fabric
+
 DATA_DIR = Path(__file__).parent / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
 
@@ -134,31 +136,54 @@ class AskRequest(BaseModel):
 
 @app.post("/api/ask")
 def ask(req: AskRequest):
-    """NL query endpoint. In a fully-built deployment this delegates to
-    forge.intelligence.executor; for the generated localhost demo we return
-    a stub answer so the UI can be exercised end-to-end."""
-    # Look up KPI by simple heuristic — real version uses semantic catalog
-    matched = None
-    q = req.question.lower()
-    for k in KPIS:
-        if k["name"].lower() in q:
-            matched = k
-            break
-    if not matched and KPIS:
-        matched = KPIS[0]
-    if not matched:
-        return {"answer": "No KPIs configured yet for this app.", "citations": []}
+    """NL query endpoint. The agent routes the question to the right data
+    connection (see connections.json) and runs the matching query."""
+    return fabric.ask(req.question)
 
-    return {
-        "answer": (
-            f"For '{matched['name']}': in a fully-wired deployment this answer would "
-            f"be computed from {matched['formula']} against your live data sources. "
-            f"On the demo path, your manifest configured {len(KPIS)} KPIs and "
-            f"{len(DATASOURCES)} sources."
-        ),
-        "kpi_id": matched["id"],
-        "citations": [{"source": ds["name"], "kind": ds["kind"]} for ds in DATASOURCES[:3]],
-    }
+
+# ── Data fabric: multi-source connections the agent routes across ────
+
+class ConnectionPayload(BaseModel):
+    id: str
+    label: str | None = None
+    engine: str
+    host: str
+    port: int | None = None
+    database: str
+    user: str
+    password: str | None = None
+    password_env: str | None = None
+    catalog: str | None = None
+    keywords: list[str] = []
+    enabled: bool = True
+
+
+@app.get("/api/fabric/sources")
+def fabric_sources():
+    return {"sources": fabric.list_sources()}
+
+
+@app.get("/api/connections")
+def list_connections():
+    return {"connections": fabric.list_connections()}
+
+
+@app.post("/api/connections")
+def upsert_connection(body: ConnectionPayload):
+    try:
+        return fabric.upsert_connection(body.model_dump(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/connections/test")
+def test_connection(body: ConnectionPayload):
+    return fabric.test_connection(body.model_dump(exclude_none=True))
+
+
+@app.delete("/api/connections/{cid}")
+def delete_connection(cid: str):
+    return fabric.delete_connection(cid)
 
 
 @app.get("/api/insights/digest")

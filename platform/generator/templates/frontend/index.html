@@ -31,8 +31,9 @@
 
       <section class="card">
         <h2>Ask anything</h2>
+        <p class="muted" style="margin:0 0 12px">The agent picks the right database, runs the query, and shows the result.</p>
         <div class="ask">
-          <input id="q" placeholder="Try: What's our revenue trend this quarter?" />
+          <input id="q" placeholder="Try: top selling products · revenue by region · flagged transfers" />
           <button id="askBtn" style="background: {{PRIMARY_COLOR}}">Ask</button>
         </div>
         <div id="answer"></div>
@@ -60,6 +61,16 @@
       <section class="card">
         <h2>Data sources</h2>
         <div id="ds" class="ds-list"></div>
+      </section>
+
+      <section class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h2 style="margin:0">Database connections</h2>
+          <button id="addConnBtn" class="btn-add">+ Add connection</button>
+        </div>
+        <p class="muted" style="margin:8px 0 0">Point this app at your own databases. Edit a connection string or add a new
+          Postgres / MySQL / MongoDB source — the agent will route questions to it.</p>
+        <div id="connections"></div>
       </section>
     </main>
 

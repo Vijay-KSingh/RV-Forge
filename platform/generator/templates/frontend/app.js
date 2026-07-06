@@ -72,27 +72,49 @@ async function renderDS() {
   } catch (e) {}
 }
 
+function renderAnswer(d) {
+  const out = document.getElementById('answer');
+  if (d.error) {
+    out.innerHTML = `<div class="route-err">${escapeHtml(d.explanation || d.error)}</div>`;
+    return;
+  }
+  const modeBadge = d.mode === 'docker' ? '<span class="cmode live">● live</span>'
+    : d.mode === 'embedded' ? '<span class="cmode emb">demo data</span>'
+    : `<span class="cmode off">${escapeHtml(d.mode)}</span>`;
+  const table = (d.rows && d.rows.length) ? `
+    <div class="table-wrap"><table class="data-table">
+      <thead><tr>${d.columns.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
+      <tbody>${d.rows.map(r => `<tr>${r.map(v => `<td>${escapeHtml(v)}</td>`).join('')}</tr>`).join('')}</tbody>
+    </table></div>` : '<div class="muted" style="margin-top:8px">No rows returned.</div>';
+  out.innerHTML = `
+    <div class="route-line">
+      <span class="route-badge">${escapeHtml(d.engine)} · ${escapeHtml(d.domain)}</span>
+      ${modeBadge}
+      <span class="muted">${d.fallback ? 'no strong match' : (d.confidence + '% match')} · ${d.row_count} row(s)</span>
+    </div>
+    ${d.query ? `<pre class="query">${escapeHtml(d.query)}</pre>` : ''}
+    ${table}`;
+}
+
 document.getElementById('askBtn').addEventListener('click', async () => {
   const q = document.getElementById('q').value.trim();
   if (!q) return;
   const out = document.getElementById('answer');
   out.classList.add('show');
-  out.textContent = 'Thinking…';
+  out.innerHTML = '<span class="muted">Routing & querying…</span>';
   try {
-    const role = document.getElementById('role').value;
     const r = await fetchJSON('/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: q, role_id: role }),
+      body: JSON.stringify({ question: q }),
     });
-    out.innerHTML = `<div>${escapeHtml(r.answer)}</div>` +
-      (r.citations && r.citations.length
-        ? `<div style="margin-top:10px;font-size:12px;color:#6b7280">Sources: ${
-            r.citations.map(c => escapeHtml(c.source)).join(', ')}</div>`
-        : '');
+    renderAnswer(r);
   } catch (e) {
     out.textContent = 'Backend not reachable: ' + e.message;
   }
+});
+document.getElementById('q').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('askBtn').click();
 });
 
 // ── Excel / CSV upload ──────────────────────────────────────────────
@@ -264,7 +286,140 @@ function route() {
 }
 window.addEventListener('hashchange', route);
 
+// ── Database connections manager ────────────────────────────────────
+const connEl = document.getElementById('connections');
+const ENGINES = ['postgresql', 'mysql', 'mongodb'];
+let editingId = null;
+
+function connCard(c) {
+  const modeBadge = c.mode === 'docker' ? '<span class="cmode live">● live</span>'
+    : c.mode === 'embedded' ? '<span class="cmode emb">demo data</span>'
+    : '<span class="cmode off">offline</span>';
+  const conn = `${escapeHtml(c.engine)}://${escapeHtml(c.user || '')}@${escapeHtml(c.host || '')}:${c.port || ''}/${escapeHtml(c.database || '')}`;
+  return `<div class="conn" data-id="${escapeHtml(c.id)}">
+    <div class="conn-head">
+      <div><strong>${escapeHtml(c.label || c.id)}</strong> ${modeBadge}
+        ${c.demo ? '<span class="cmode demo">demo</span>' : ''}</div>
+      <div class="conn-actions">
+        <button class="btn-link test">Test</button>
+        <button class="btn-link edit">Edit</button>
+        ${c.demo ? '' : '<button class="btn-link del">Delete</button>'}
+      </div>
+    </div>
+    <div class="conn-str mono">${conn} · <b>${c.total_rows}</b> rows</div>
+    <div class="conn-test-out"></div>
+  </div>`;
+}
+
+function connForm(c) {
+  c = c || { engine: 'postgresql', enabled: true, keywords: [] };
+  const opts = ENGINES.map(e => `<option value="${e}" ${c.engine === e ? 'selected' : ''}>${e}</option>`).join('');
+  return `<div class="conn-form">
+    <div class="cf-grid">
+      <label>ID <input name="id" value="${escapeHtml(c.id || '')}" ${c.id ? 'readonly' : ''} placeholder="e.g. sales_db"></label>
+      <label>Label <input name="label" value="${escapeHtml(c.label || '')}" placeholder="Sales DB"></label>
+      <label>Engine <select name="engine">${opts}</select></label>
+      <label>Host <input name="host" value="${escapeHtml(c.host || '')}" placeholder="localhost"></label>
+      <label>Port <input name="port" type="number" value="${c.port || ''}" placeholder="5432"></label>
+      <label>Database <input name="database" value="${escapeHtml(c.database || '')}" placeholder="mydb"></label>
+      <label>User <input name="user" value="${escapeHtml(c.user || '')}" placeholder="app_user"></label>
+      <label>Password env <input name="password_env" value="${escapeHtml(c.password_env || '')}" placeholder="MYDB_PASSWORD"></label>
+      <label>Password <input name="password" type="password" placeholder="${c.has_password ? '•••• (set)' : 'optional (local)'}"></label>
+      <label class="cf-wide">Keywords (comma-sep) <input name="keywords" value="${escapeHtml((c.keywords || []).join(', '))}" placeholder="sales, orders, revenue"></label>
+    </div>
+    <div class="cf-actions">
+      <button class="btn-link cf-test">Test connection</button>
+      <span class="cf-msg"></span>
+      <span style="flex:1"></span>
+      <button class="btn cf-cancel">Cancel</button>
+      <button class="btn cf-save" style="background:{{PRIMARY_COLOR}};color:#fff">Save</button>
+    </div>
+  </div>`;
+}
+
+function formValues(form) {
+  const g = n => form.querySelector(`[name="${n}"]`).value.trim();
+  const v = {
+    id: g('id'), label: g('label'), engine: g('engine'), host: g('host'),
+    database: g('database'), user: g('user'), enabled: true,
+    keywords: g('keywords').split(',').map(s => s.trim()).filter(Boolean),
+  };
+  if (g('port')) v.port = parseInt(g('port'), 10);
+  if (g('password_env')) v.password_env = g('password_env');
+  if (g('password')) v.password = g('password');
+  return v;
+}
+
+async function renderConnections() {
+  if (!connEl) return;
+  try {
+    const d = await fetchJSON('/api/connections');
+    connEl.innerHTML = d.connections.map(connCard).join('') || '<div class="muted">No connections yet.</div>';
+  } catch (e) { connEl.innerHTML = `<div class="route-err">Could not load connections: ${escapeHtml(e.message)}</div>`; }
+}
+
+async function saveConn(values) {
+  return fetchJSON('/api/connections', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values),
+  });
+}
+async function testConn(values) {
+  return fetchJSON('/api/connections/test', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values),
+  });
+}
+
+if (connEl) {
+  document.getElementById('addConnBtn').addEventListener('click', () => {
+    if (connEl.querySelector('.conn-form')) return;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = connForm(null);
+    connEl.prepend(wrap);
+  });
+
+  connEl.addEventListener('click', async (e) => {
+    const btn = e.target;
+    const card = btn.closest('.conn');
+    const form = btn.closest('.conn-form');
+
+    if (btn.classList.contains('edit') && card) {
+      const id = card.getAttribute('data-id');
+      const d = await fetchJSON('/api/connections');
+      const c = d.connections.find(x => x.id === id);
+      const wrap = document.createElement('div');
+      wrap.innerHTML = connForm(c);
+      card.replaceWith(wrap);
+    }
+    if (btn.classList.contains('test') && card) {
+      const id = card.getAttribute('data-id');
+      const d = await fetchJSON('/api/connections');
+      const c = d.connections.find(x => x.id === id);
+      const out = card.querySelector('.conn-test-out');
+      out.textContent = 'Testing…';
+      try { const r = await testConn(c); out.innerHTML = r.reachable ? '<span class="ok">✓ reachable</span>' : '<span class="bad">✕ unreachable</span>'; }
+      catch (err) { out.innerHTML = `<span class="bad">✕ ${escapeHtml(err.message)}</span>`; }
+    }
+    if (btn.classList.contains('del') && card) {
+      if (!confirm('Delete this connection?')) return;
+      await fetchJSON('/api/connections/' + encodeURIComponent(card.getAttribute('data-id')), { method: 'DELETE' });
+      renderConnections();
+    }
+    if (btn.classList.contains('cf-cancel') && form) { renderConnections(); }
+    if (btn.classList.contains('cf-test') && form) {
+      const msg = form.querySelector('.cf-msg'); msg.textContent = 'Testing…';
+      try { const r = await testConn(formValues(form)); msg.innerHTML = r.reachable ? '<span class="ok">✓ reachable</span>' : '<span class="bad">✕ unreachable</span>'; }
+      catch (err) { msg.innerHTML = `<span class="bad">✕ ${escapeHtml(err.message)}</span>`; }
+    }
+    if (btn.classList.contains('cf-save') && form) {
+      const msg = form.querySelector('.cf-msg'); msg.textContent = 'Saving…';
+      try { await saveConn(formValues(form)); renderConnections(); }
+      catch (err) { msg.innerHTML = `<span class="bad">${escapeHtml(err.message)}</span>`; }
+    }
+  });
+}
+
 renderDigest();
 renderKPIs();
 renderDS();
+renderConnections();
 route();
