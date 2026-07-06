@@ -40,6 +40,7 @@ from forge.manifest import Manifest
 from forge.generator import Generator, BuildEvent
 from forge.app_runner import runner as app_runner
 from forge import app_probe
+from forge.fabric import fabric
 from forge.secret_manager import default_manager
 from forge.intelligence.insights import (
     TimeSeriesPoint, Anomaly, detect_anomalies, compose_digest,
@@ -423,6 +424,22 @@ def _reap_orphan_apps():
     app_runner.reap_orphans()
 
 
+# ── Multi-source data fabric (agentic DB router) ─────────────────────
+
+class FabricAskRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+
+
+@app.get("/api/fabric/sources")
+def fabric_sources():
+    return {"sources": fabric.list_sources()}
+
+
+@app.post("/api/fabric/ask")
+def fabric_ask(body: FabricAskRequest):
+    return fabric.ask(body.question)
+
+
 @app.on_event("shutdown")
 def _stop_running_apps():
     app_runner.stop_all()
@@ -727,4 +744,9 @@ if WIZARD_DIR.exists() and (WIZARD_DIR / "index.html").exists():
     @app.get("/")
     def root():
         return FileResponse(WIZARD_DIR / "index.html")
+
+    @app.get("/fabric")
+    def fabric_page():
+        return FileResponse(WIZARD_DIR / "fabric.html")
+
     app.mount("/static", StaticFiles(directory=str(WIZARD_DIR)), name="static")

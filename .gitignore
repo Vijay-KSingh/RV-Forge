@@ -36,3 +36,6 @@ Thumbs.db
 # ── ML training artifacts / logs ──────────────────────────────────────────────
 catboost_info/
 *.log
+
+# ── Data fabric embedded DBs (seeded at runtime) ──────────────────────────────
+.forge_fabric/
